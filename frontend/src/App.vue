@@ -58,14 +58,14 @@ function handleLogout() {
 
 <template>
   <div class="min-h-screen">
-    <nav class="sticky top-0 z-50 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
+    <nav class="sticky top-0 z-50 bg-dark-base/80 backdrop-blur-xl" style="border-bottom: 1px solid transparent; border-image: linear-gradient(90deg, rgba(0,240,255,0.3), transparent 50%, rgba(255,45,107,0.3)) 1;">
       <div class="shell-container flex min-h-20 flex-wrap items-center justify-between gap-4 py-4">
         <router-link to="/" class="flex items-center gap-3">
           <div class="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary-300/30 bg-primary-500/10 text-lg font-semibold text-primary-100 shadow-glow">
             练
           </div>
           <div>
-            <p class="text-base font-semibold text-white">游戏代练平台</p>
+            <p class="text-base font-semibold animate-glitch-once" style="color: #00f0ff; text-shadow: 0 0 10px rgba(0,240,255,0.5);">游戏代练平台</p>
             <p class="text-xs text-slate-400">上分、冲段、代肝与定制代练服务</p>
           </div>
         </router-link>
@@ -118,7 +118,7 @@ function handleLogout() {
       <router-view />
     </main>
 
-    <footer class="border-t border-white/10 bg-slate-950/70">
+    <footer class="bg-dark-base/70" style="border-top: 1px solid transparent; border-image: linear-gradient(90deg, rgba(0,240,255,0.3), transparent 50%, rgba(255,45,107,0.3)) 1;">
       <div class="shell-container grid gap-8 py-10 lg:grid-cols-[1.2fr_0.8fr]">
         <div class="space-y-3">
           <p class="eyebrow">热门服务</p>
@@ -131,15 +131,15 @@ function handleLogout() {
         </div>
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1">
-          <div class="stat-card">
+          <div class="stat-card cyber-corner">
             <p class="text-2xl font-semibold text-white">6+</p>
             <p class="mt-1 text-sm text-slate-400">热门游戏服务覆盖</p>
           </div>
-          <div class="stat-card">
+          <div class="stat-card cyber-corner">
             <p class="text-2xl font-semibold text-white">多场景</p>
             <p class="mt-1 text-sm text-slate-400">冲段、代肝、活动与陪练</p>
           </div>
-          <div class="stat-card">
+          <div class="stat-card cyber-corner">
             <p class="text-2xl font-semibold text-white">全流程</p>
             <p class="mt-1 text-sm text-slate-400">下单、接单、完成状态可查</p>
           </div>
