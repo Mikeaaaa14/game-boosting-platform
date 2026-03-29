@@ -1,0 +1,187 @@
+"""
+Order model module.
+Defines the Order entity for game boosting service requests.
+"""
+
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum as PyEnum
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
+
+from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
+
+
+class OrderStatus(str, PyEnum):
+    """
+    Enumeration of order statuses in the platform.
+    Inherits from str for JSON serialization compatibility.
+    """
+    
+    PENDING = "PENDING"         # Order created, waiting for booster assignment
+    LOCKED = "LOCKED"           # Order assigned to a booster, in progress
+    COMPLETED = "COMPLETED"     # Order successfully completed
+    DISPUTED = "DISPUTED"       # Order has an issue requiring resolution
+    CANCELLED = "CANCELLED"     # Order was cancelled
+
+
+class Order(Base):
+    """
+    Order model representing game boosting service requests.
+    
+    Workflow:
+    1. Customer creates order (status: PENDING)
+    2. Booster accepts order (status: LOCKED)
+    3. Booster completes service (status: COMPLETED)
+    4. If issues arise (status: DISPUTED)
+    """
+    
+    __tablename__ = "orders"
+    
+    # Primary key
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+        index=True,
+    )
+    
+    # Foreign keys
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    
+    booster_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    
+    # Game information
+    game_name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        index=True,
+    )
+    
+    current_rank: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    
+    target_rank: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    
+    # Pricing
+    price: Mapped[Decimal] = mapped_column(
+        Numeric(precision=10, scale=2),
+        nullable=False,
+    )
+    
+    # Order status
+    status: Mapped[OrderStatus] = mapped_column(
+        Enum(
+            OrderStatus,
+            name="order_status_enum",
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        default=OrderStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+    
+    # Detailed description provided by customer
+    description_raw: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    
+    # AI-generated structured description
+    description_ai: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    
+    # Game account credentials (encrypted in production)
+    game_account: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    
+    game_password: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        default=func.now(),
+        server_default=func.now(),
+        nullable=False,
+    )
+    
+    updated_at: Mapped[datetime] = mapped_column(
+        default=func.now(),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    
+    locked_at: Mapped[Optional[datetime]] = mapped_column(
+        nullable=True,
+    )
+    
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        nullable=True,
+    )
+    
+    # Additional metadata
+    priority: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+    )
+    
+    notes: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    
+    # Relationships
+    user: Mapped["User"] = relationship(
+        "User",
+        back_populates="orders_as_customer",
+        foreign_keys=[user_id],
+        lazy="joined",
+    )
+    
+    booster: Mapped[Optional["User"]] = relationship(
+        "User",
+        back_populates="orders_as_booster",
+        foreign_keys=[booster_id],
+        lazy="joined",
+    )
+    
+    def __repr__(self) -> str:
+        return (
+            f"<Order(id={self.id}, game={self.game_name!r}, "
+            f"status={self.status.value}, price={self.price})>"
+        )
+    
+    @property
+    def is_assignable(self) -> bool:
+        """Check if order can be assigned to a booster."""
+        return self.status == OrderStatus.PENDING and self.booster_id is None
+    
+    @property
+    def is_completable(self) -> bool:
+        """Check if order can be marked as completed."""
+        return self.status == OrderStatus.LOCKED and self.booster_id is not None

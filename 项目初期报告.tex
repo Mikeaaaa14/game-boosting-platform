@@ -1,0 +1,544 @@
+\documentclass[12pt,a4paper]{article}
+
+% ============================================================================
+% 宏包引入与环境配置
+% ============================================================================
+\usepackage[UTF8]{ctex}      % 中文支持
+\usepackage[top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm]{geometry} % 页边距优化
+\usepackage{graphicx}        % 图片支持
+\usepackage{float}           % 浮动体控制
+\usepackage{booktabs}        % 三线表
+\usepackage{array}           % 表格列格式
+\usepackage{colortbl}        % 表格颜色
+\usepackage{xcolor}          % 颜色支持
+\usepackage{enumitem}        % 列表定制
+\usepackage{fancyhdr}        % 页眉页脚
+\usepackage{tikz}            % 绘图引擎
+\usepackage{tabularx}        % 自适应宽度表格
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+
+% --- 颜色定义 ---
+\definecolor{headerblue}{RGB}{41, 58, 82}      % 表头深蓝
+\definecolor{processblue}{RGB}{222, 235, 247}  % 流程图蓝
+
+% --- 页眉页脚设置 ---
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small \textbf{智能游戏代练服务平台}}
+\fancyhead[R]{\small \textbf{项目初期报告}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% --- 流程图全局样式定义 ---
+\tikzset{
+    startstop/.style={rectangle, rounded corners, minimum width=2cm, minimum height=1cm, align=center, draw=black, thick, fill=red!10},
+    io/.style={trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=2.5cm, minimum height=1cm, align=center, draw=black, thick, fill=blue!10},
+    process/.style={rectangle, minimum width=3cm, minimum height=1cm, align=center, draw=black, thick, fill=yellow!10},
+    decision/.style={diamond, aspect=2.5, minimum width=3cm, minimum height=1cm, align=center, draw=black, thick, fill=green!10},
+    arrow/.style={thick, ->, >=Stealth}
+}
+
+\begin{document}
+
+% ============================================================================
+% 封面
+% ============================================================================
+\begin{titlepage}
+    \centering
+    \vspace*{3cm}
+    
+    {\Huge \bfseries 软件工程项目设计}\\[0.8cm]
+    {\LARGE 项目初期报告}\\[2.5cm]
+    
+    \rule{0.8\textwidth}{1.5pt}\\[0.6cm]
+    {\huge \bfseries 基于大语言模型的智能游戏代练服务平台}\\[0.2cm]
+    \rule{0.8\textwidth}{1.5pt}\\[2.5cm]
+    
+    \begin{flushleft}
+    \hspace{4cm}
+    \large
+    \textbf{姓名：}徐翱、易熙铭\\
+    \vspace{0.3cm}
+    \hspace{4cm}
+    \textbf{学号：}D24090129288、D24090150299\\
+    \end{flushleft}
+    
+    \vfill
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+% 1. 作品名称及简要说明
+% ============================================================================
+\section{项目拟定名称及简要说明}
+
+\subsection{项目拟定名称}
+\textbf{基于大语言模型的智能游戏代练服务平台}
+
+\subsection{简要说明}
+本项目打算实现一个集即时通讯、订单管理与AI解析于一体的综合游戏服务系统。平台希望集成大语言模型（LLM），能够自动解析用户自然语言描述的代练需求，自动生成标准化订单。系统连接普通玩家与代练玩家，解决传统市场中定价不透明、需求沟通成本高的问题，实现从需求发布到服务交付的全流程数字化管理。
+
+% ============================================================================
+% 2. 系统层次结构图
+% ============================================================================
+\section{系统层次结构图}
+
+\subsection{层次结构图}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    scale=0.85, transform shape,
+    layer/.style={rectangle, draw=black!60, thick, minimum width=12cm, minimum height=1.2cm, align=center, font=\small, rounded corners=3pt},
+    arr/.style={-{Stealth}, thick, color=gray!80}
+]
+    % 表现层
+    \node[layer, fill=blue!10] (L1) at (0,0) {\textbf{表现层 }\\Vue 3前端框架 / 移动端适配 / 实时WebSocket通讯};
+    
+    % 网关层
+    \node[layer, fill=green!10, below=0.8cm of L1] (L2) {\textbf{接口网关层 }\\FastAPI 路由分发 / JWT 身份鉴权 / 请求限流};
+    
+    % 业务层
+    \node[layer, minimum width=5.8cm, fill=orange!10, below=0.8cm of L2, xshift=-3.1cm] (L3a) {\textbf{业务逻辑服务}\\订单流转 / 支付结算 / 用户管理};
+    \node[layer, minimum width=5.8cm, fill=purple!10, below=0.8cm of L2, xshift=3.1cm] (L3b) {\textbf{AI 智能服务}\\NLP需求解析 / 价格估算模型};
+    
+    % 数据层
+    \node[layer, fill=gray!10, below=0.8cm of L3a, xshift=3.1cm] (L4) {\textbf{数据层}\\MySQL (业务数据) / Redis (缓存与会话) / MinIO (游戏战绩截图存储)};
+
+    % 连线
+    \draw[arr] (L1) -- (L2);
+    \draw[arr] (L2.south) -- ++(0,-0.2) -| (L3a.north);
+    \draw[arr] (L2.south) -- ++(0,-0.2) -| (L3b.north);
+    \draw[arr] (L3a.south) -- ++(0,-0.2) -| ([xshift=-2cm]L4.north);
+    \draw[arr] (L3b.south) -- ++(0,-0.2) -| ([xshift=2cm]L4.north);
+\end{tikzpicture}
+\caption{系统技术架构层次图}
+\end{figure}
+
+\subsection{结构说明}
+本系统采用经典的前后端分离 B/S 架构，自上而下分为四层：
+\begin{itemize}
+    \item \textbf{表现层}：基于 Vue 3 构建，负责与用户、代练玩家及管理员进行交互，展示可视化数据。
+    \item \textbf{网关层}：使用 FastAPI 构建统一入口，负责处理 HTTP 请求、身份验证（JWT）及流量控制，确保系统安全。
+    \item \textbf{业务与AI层}：这是系统的核心。业务层处理传统的订单生命周期管理；AI层集成 DeepSeek 大模型 API，将非结构化的用户语音/文字需求转化为结构化数据。
+    \item \textbf{数据层}：采用 MySQL 8.0 存储核心业务数据，保证数据的一致性与完整性。
+\end{itemize}
+
+% ============================================================================
+% 3. AI工具使用说明
+% ============================================================================
+\section{AI 工具使用说明}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.5}
+\begin{tabularx}{\textwidth}{|l|l|X|}
+\hline
+\rowcolor{headerblue}
+\textcolor{white}{\textbf{工具类型}} & \textcolor{white}{\textbf{工具名称}} & \textcolor{white}{\textbf{具体使用方式}} \\
+\hline
+\textbf{核心功能组件} & DeepSeek API (LLM) & 集成于后端代码中，用于接收用户的自然语言描述（如“我要从星耀打到王者”），自动提取游戏名、目标段位并估算价格。 \\
+\hline
+\textbf{辅助开发工具} & Claude Opus 4.5 和 Gemini 3 pro  & 用于辅助生成项目架构图代码、优化数据库 E-R 模型设计以及编写部分复杂的正则匹配逻辑。 \\
+\hline
+\end{tabularx}
+\caption{AI 工具应用列表}
+\end{table}
+
+% ============================================================================
+% 4. 功能建模
+% ============================================================================
+\section{功能建模}
+
+\subsection{系统输入与输出定义}
+\begin{itemize}
+    \item \textbf{外部实体}：普通用户、代练玩家、管理员。
+    \item \textbf{输入数据}：用户提交的自然语言需求、代练玩家的接单申请与战绩截图、管理员的基础配置。
+    \item \textbf{输出数据}：AI 解析后的标准化订单、订单状态通知、统计报表。
+\end{itemize}
+
+\subsection{顶层数据流图}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    scale=0.9, transform shape,
+    entity/.style={rectangle, draw=black, thick, minimum width=2.5cm, minimum height=1.2cm, align=center, fill=white},
+    process/.style={circle, draw=black, thick, fill=processblue, minimum size=3.5cm, align=center},
+    biarr/.style={<->, >=Stealth, thick, shorten >=2pt, shorten <=2pt}
+]
+    \node[process] (sys) at (0, 0) {\textbf{智能游戏}\\\textbf{代练平台}};
+    \node[entity] (admin) at (-6.5, 2.5) {管理员};
+    \node[entity] (user) at (-6.5, -2.5) {普通用户};
+    \node[entity] (booster) at (6.5, 0) {代练玩家};
+
+    \draw[biarr] (admin.east) to [bend left=20] 
+        node[midway, above, sloped, font=\small] {管理配置 / 统计报表} (sys.140);
+    \draw[biarr] (user.east) to [bend right=20] 
+        node[midway, below, sloped, font=\small] {需求描述 / 订单进度} (sys.220);
+    \draw[biarr] (sys.east) -- (booster.west)
+        node[midway, above, font=\small, yshift=4pt] {可接订单列表}
+        node[midway, below, font=\small, yshift=-4pt] {接单与完单反馈};
+\end{tikzpicture}
+\caption{顶层数据流图}
+\end{figure}
+
+\subsection{一层数据流图 }
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    scale=0.85, transform shape,
+    entity/.style={rectangle, draw=black, thick, fill=gray!10, minimum width=2cm, minimum height=0.8cm, align=center, font=\small},
+    process/.style={circle, draw=black, thick, fill=blue!5, minimum size=2.2cm, align=center, font=\small},
+    store/.style={draw, minimum width=2.5cm, minimum height=0.8cm, align=center, font=\small, fill=white},
+    arr/.style={-{Stealth}, thick, font=\scriptsize},
+    biarr/.style={<->, >=Stealth, thick, font=\scriptsize}
+]
+
+    % 实体
+    \node[entity] (user) at (-6, 5) {用户};
+    \node[entity] (admin) at (0, 5) {管理员};
+    \node[entity] (booster) at (6, 5) {代练玩家};
+
+    % 加工
+    \node[process] (P1) at (-6, 1.5) {1.0\\用户认证};
+    \node[process] (P2) at (-2, 1.5) {2.0\\AI需求解析};
+    \node[process] (P3) at (2, 1.5) {3.0\\订单管理};
+    \node[process] (P4) at (6, 1.5) {4.0\\查询统计};
+
+    % 存储
+    \node[store] (D1) at (-6, -1.5) {D1 用户表};
+    \node[store] (D2) at (2, -1.5) {D2 订单数据库};
+
+    % 连线
+    \draw[arr] (user) -- node[left] {登录/注册} (P1);
+    \draw[arr] (user.south east) -- node[above, sloped, pos=0.4] {自然语言需求} (P2.north west);
+    \draw[arr] (admin) -- node[right] {模型配置} (P2.north);
+    \draw[arr] (admin.south east) -- node[above, sloped] {审计请求} (P4.north west);
+    \draw[biarr] (booster) -- node[right] {接单/结算} (P3);
+
+    \draw[arr] (P1) -- node[above] {Token} (P2);
+    \draw[arr] (P2) -- node[above] {结构化订单} (P3);
+
+    \draw[biarr] (P1) -- node[left] {读写账号} (D1);
+    \draw[arr] (P2.south) -- ++(0,-0.5) -| node[pos=0.2, below] {写入新单} (D2.west);
+    \draw[biarr] (P3) -- node[right] {状态更新} (D2);
+    \draw[arr] (D2.east) -| node[pos=0.3, above] {读取数据} (P4.south);
+\end{tikzpicture}
+\caption{一层数据流图：核心业务逻辑分解}
+\end{figure}
+
+% ============================================================================
+% 5. 数据建模
+% ============================================================================
+\section{数据建模}
+
+\subsection{实体-关系图 (E-R图)}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    scale=0.8, transform shape,
+    entity/.style={rectangle, draw=black, thick, fill=blue!5, minimum width=2cm, minimum height=0.9cm, align=center, font=\small},
+    attr/.style={ellipse, draw=black, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\footnotesize, fill=white},
+    rel/.style={diamond, draw=black, thick, fill=orange!10, minimum width=1.6cm, minimum height=0.8cm, aspect=1.8, align=center, font=\small},
+    line/.style={draw, thick}
+]
+    % 实体
+    \node[entity] (user) at (-5, 0) {用户};
+    \node[entity] (order) at (0, 0) {订单};
+    \node[entity] (booster) at (5, 0) {代练玩家};
+
+    % 属性
+    \node[attr] (u1) at (-6.2, 1.5) {\underline{id}};
+    \node[attr] (u2) at (-3.8, 1.5) {username};
+    \node[attr] (u3) at (-6.2, -1.5) {email};
+    \node[attr] (u4) at (-3.8, -1.5) {role};
+    \draw (user)--(u1); \draw (user)--(u2); \draw (user)--(u3); \draw (user)--(u4);
+
+    \node[attr] (o1) at (-1.5, 2.2) {\underline{id}};
+    \node[attr] (o2) at (0, 2.8) {game\_name};
+    \node[attr] (o3) at (1.5, 2.2) {status};
+    \node[attr] (o4) at (-1.5, -2.2) {price};
+    \node[attr] (o5) at (0, -2.8) {rank\_to};
+    \node[attr] (o6) at (1.5, -2.2) {rank\_from};
+    \draw (order)--(o1); \draw (order)--(o2); \draw (order)--(o3);
+    \draw (order)--(o4); \draw (order)--(o5); \draw (order)--(o6);
+
+    \node[attr] (b1) at (3.8, 1.5) {\underline{id}};
+    \node[attr] (b2) at (6.2, 1.5) {level};
+    \node[attr] (b3) at (5, -2.0) {rating};
+    \draw (booster)--(b1); \draw (booster)--(b2); \draw (booster)--(b3);
+
+    % 关系
+    \node[rel] (R1) at (-2.5, 0) {创建};
+    \draw[line] (user) -- (R1) node[pos=0.25, above] {1};
+    \draw[line] (R1) -- (order) node[pos=0.75, above] {n};
+
+    \node[rel] (R2) at (2.5, 0) {接取};
+    \draw[line] (order) -- (R2) node[pos=0.25, above] {n};
+    \draw[line] (R2) -- (booster) node[pos=0.75, above] {1};
+\end{tikzpicture}
+\caption{系统核心实体关系图}
+\end{figure}
+
+\subsection{数据字典}
+基于后端部分的初步规划，系统核心数据表结构如下：
+
+\subsubsection{1. Users (用户表)}
+\textbf{说明}：存储系统中所有角色的账户信息。
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|l|l|X|}
+\hline
+\rowcolor{headerblue} \textcolor{white}{\textbf{字段名}} & \textcolor{white}{\textbf{数据类型}} & \textcolor{white}{\textbf{约束}} & \textcolor{white}{\textbf{说明}} \\
+\hline
+id & Integer & PK & 用户唯一标识 \\
+\hline
+email & String & Unique & 登录邮箱 \\
+\hline
+username & String & Not Null & 平台显示昵称 \\
+\hline
+role & Enum & Not Null & 角色：USER, BOOSTER, ADMIN \\
+\hline
+is\_active & Boolean & Default True & 账户状态 \\
+\hline
+created\_at & DateTime & Not Null & 注册时间 \\
+\hline
+\end{tabularx}
+\end{table}
+
+\subsubsection{2. Orders (订单表)}
+\textbf{说明}：核心业务表，记录需求解析、接单与交付的全生命周期。
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{|l|l|l|X|}
+\hline
+\rowcolor{headerblue} \textcolor{white}{\textbf{字段名}} & \textcolor{white}{\textbf{数据类型}} & \textcolor{white}{\textbf{约束}} & \textcolor{white}{\textbf{说明}} \\
+\hline
+id & Integer & PK & 订单编号 \\
+\hline
+user\_id & Integer & FK(users) & 发单人ID \\
+\hline
+booster\_id & Integer & FK(users), Nullable & 接单代练ID（未接单为空） \\
+\hline
+game\_name & String & Index & 游戏名称 \\
+\hline
+rank\_from & String & Not Null & 起始段位 \\
+\hline
+rank\_to & String & Not Null & 目标段位 \\
+\hline
+price & Decimal & Not Null & 订单价格（由规则计算，避免 LLM 直接报价格） \\
+\hline
+status & Enum & Default PENDING & PENDING, LOCKED, IN\_PROGRESS, DELIVERED, COMPLETED, CANCELLED, DISPUTED \\
+\hline
+requirement\_raw & Text & Not Null & 用户原始自然语言输入 \\
+\hline
+desc\_ai & Text & Nullable & AI 解析后的结构化 JSON 字符串 \\
+\hline
+order\_version & Integer & Default 0 & 乐观锁版本号，用于抢单/更新并发控制 \\
+\hline
+locked\_at & DateTime & Nullable & 被接单（锁定）时间 \\
+\hline
+delivered\_at & DateTime & Nullable & 提交交付证明时间 \\
+\hline
+created\_at & DateTime & Not Null & 创建时间 \\
+\hline
+updated\_at & DateTime & Not Null & 更新时间 \\
+\hline
+\end{tabularx}
+\caption{Orders 表}
+\end{table}
+
+
+% ============================================================================
+% 5.3 核心业务逻辑流程
+% ============================================================================
+\section{核心业务逻辑流程}
+
+\subsection{用户注册逻辑}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    scale=0.92,
+    transform shape,
+    node distance=1.35cm,
+    startstop/.style={rectangle, rounded corners, minimum width=2.2cm, minimum height=1cm, align=center, draw=black, thick, fill=red!10},
+    io/.style={trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3.0cm, minimum height=1cm, align=center, draw=black, thick, fill=blue!10},
+    process/.style={rectangle, minimum width=3.3cm, minimum height=1cm, align=center, draw=black, thick, fill=yellow!10},
+    decision/.style={diamond, aspect=2.2, minimum width=3.2cm, minimum height=1.1cm, align=center, draw=black, thick, fill=green!10},
+    arrow/.style={thick, -{Stealth[length=3mm,width=2mm]}, rounded corners=0pt}
+]
+    % ---------- 主流程 (左侧) ----------
+    \node (start)    [startstop] {开始注册};
+    \node (input)    [io, below=of start] {输入：邮箱/密码/角色};
+    \node (fe_check) [decision, below=of input] {前端校验\\格式正确?};
+    \node (api)      [process, below=of fe_check] {\texttt{POST /auth/register}};
+    \node (be_check) [decision, below=of api] {后端校验\\邮箱唯一?};
+    \node (hash)     [process, below=of be_check] {密码哈希加密\\(Bcrypt)};
+    \node (db)       [process, below=of hash] {写入 Users 表};
+    \node (end)      [startstop, below=of db] {注册成功};
+
+    % ---------- 错误分支 (右侧 - 关键修复) ----------
+    
+    % 1. 定位第一个错误节点 (相对于 fe_check 向右偏移)
+    \node (err_fmt)   [process, right=3.5cm of fe_check] {提示：格式错误};
+
+    % 2. 定位第二个错误节点 (关键：使用坐标计算，强制与 err_fmt 垂直对齐，与 be_check 水平对齐)
+    % 语法含义：取 err_fmt 的 X坐标，be_check 的 Y坐标
+    \node (err_exist) [process] at (be_check -| err_fmt) {返回：邮箱已存在};
+
+    % 3. 定位“返回填写”节点 (关键：放在上述两个错误节点的正中间)
+    % 语法含义：取两点连线的中点
+    \node (err_back)  [process] at ($(err_fmt)!0.5!(err_exist)$) {返回填写\\重新提交};
+
+    % ---------- 主流程连线 ----------
+    \draw[arrow] (start) -- (input);
+    \draw[arrow] (input) -- (fe_check);
+    \draw[arrow] (fe_check) -- node[midway, right, font=\scriptsize] {是} (api);
+    \draw[arrow] (api) -- (be_check);
+    \draw[arrow] (be_check) -- node[midway, right, font=\scriptsize] {是} (hash);
+    \draw[arrow] (hash) -- (db);
+    \draw[arrow] (db) -- (end);
+
+    % ---------- 错误分支连线 (现在全是直线了) ----------
+    \draw[arrow] (fe_check.east) -- node[midway, above, font=\scriptsize] {否} (err_fmt.west);
+    \draw[arrow] (be_check.east) -- node[midway, above, font=\scriptsize] {否} (err_exist.west);
+
+    % 上下汇聚到中间 (垂直直线)
+    \draw[arrow] (err_fmt.south) -- (err_back.north);
+    \draw[arrow] (err_exist.north) -- (err_back.south);
+
+    % ---------- 回流总线 (最右侧回路) ----------
+    % 从 err_back 向右出，折线向上回到 input
+    \coordinate (bus_turn) at ($(err_back.east)+(1.5,0)$); % 拐点在右侧 1.5cm 处
+    
+    \draw[arrow] (err_back.east) -- (bus_turn) |- (input.east);
+
+\end{tikzpicture}
+\caption{用户注册逻辑流程图}
+\end{figure}
+
+
+\subsection{智能下单与匹配逻辑}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.8cm, scale=0.9, transform shape]
+    \node (start) [startstop] {用户发起需求};
+    \node (input) [io, below of=start] {输入自然语言描述};
+    \node (ai) [process, below of=input] {调用 /orders/analyze};
+    \node (form) [process, below of=ai] {返回结构化表单};
+    \node (confirm) [decision, below of=form] {用户确认?};
+    \node (submit) [process, below of=confirm] {POST /orders/create};
+    \node (pool) [process, below of=submit] {写入数据库 (PENDING)};
+    \node (wait) [startstop, below of=pool] {进入公共订单池};
+    
+    \node (modify) [process, right of=confirm, xshift=3.5cm] {手动修正信息};
+
+    \draw [arrow] (start) -- (input);
+    \draw [arrow] (input) -- (ai);
+    \draw [arrow] (ai) -- (form);
+    \draw [arrow] (form) -- (confirm);
+    \draw [arrow] (confirm) -- node[anchor=east] {是} (submit);
+    \draw [arrow] (confirm) -- node[anchor=south] {需修改} (modify);
+    \draw [arrow] (modify) |- (submit);
+    \draw [arrow] (submit) -- (pool);
+    \draw [arrow] (pool) -- (wait);
+\end{tikzpicture}
+\caption{AI 智能下单与确认流程}
+\end{figure}
+
+\subsection{代练接单逻辑}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.8cm, scale=0.9, transform shape]
+    \node (start) [startstop] {代练进入大厅};
+    \node (list) [process, below of=start] {GET /orders (PENDING)};
+    \node (filter) [decision, below of=list] {筛选订单?};
+    \node (view) [process, below of=filter] {查看详情};
+    \node (action) [process, below of=view] {点击“接单”};
+    \node (check) [decision, below of=action] {未被抢单?};
+    
+    \node (success) [startstop, below of=check, xshift=-2.5cm, yshift=-1cm] {接单成功};
+    \node (fail) [startstop, below of=check, xshift=2.5cm, yshift=-1cm] {接单失败};
+
+    \draw [arrow] (start) -- (list);
+    \draw [arrow] (list) -- (filter);
+    \draw [arrow] (filter) -- node[anchor=east] {否} (view);
+    \draw [arrow] (filter.east) -- ++(1,0) |- node[anchor=west] {按游戏/价格} (view);
+    \draw [arrow] (view) -- (action);
+    \draw [arrow] (action) -- (check);
+    \draw [arrow] (check) -| node[anchor=south] {是} (success);
+    \draw [arrow] (check) -| node[anchor=south] {否} (fail);
+\end{tikzpicture}
+\caption{代练接单流程图}
+\end{figure}
+
+% ============================================================================
+% 6. 可行性与约束分析
+% ============================================================================
+\section{可行性与约束分析}
+
+\subsection{约束条件}
+\begin{itemize}
+    \item \textbf{时间约束}：项目需在课程设计周期内完成，因此前期主要实现核心的下单与接单流程，复杂的社区功能可以为二期规划。
+    \item \textbf{技术约束}：详情请见第8点。
+    \item \textbf{成本约束}：使用开源模型或低成本 API (DeepSeek)，控制 token 消耗成本。
+\end{itemize}
+
+\subsection{成本估算}
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor{headerblue} \textcolor{white}{\textbf{成本项}} & \textcolor{white}{\textbf{内容}} & \textcolor{white}{\textbf{预估开销}} \\
+\hline
+人力成本 & 后端/前端开发、文档编写 & 2人月 (学生自研) \\
+\hline
+运行环境 & 云服务器 (2核4G) & 约 50元/月 \\
+\hline
+AI 服务 & DeepSeek API 调用费 & 按量计费 \\
+\hline
+\end{tabular}
+\caption{项目成本分析表}
+\end{table}
+
+% ============================================================================
+% 8. 软件技术扩展性与核心难点分析
+% ============================================================================
+\section{软件技术扩展性与核心难点分析}
+
+本软件在初期设计中采用了标准化的敏捷开发架构，以快速验证业务闭环。但面向实际生产环境的复杂场景，系统在架构演进、功能完备性以及核心技术攻关方面仍需进一步的理论分析与规划。
+
+\subsection{软件架构的可扩展性开发可能}
+针对当前拟定软件系统的局限性，可以从以下三个维度的架构升级路线，以适应用户规模的增长和实际软件开发的场景：
+
+\subsubsection{1. 认证安全体系升级（SMTP $\rightarrow$ SMS/MFA）}
+\begin{itemize}
+    \item \textbf{拟定采取技术分析}：当前采用邮件验证码成本较低，但实时性较差，且不符合国内移动互联网用户的注册习惯。
+    \item \textbf{可以改进的策略}：引入短信网关（如阿里云 SMS），并结合 Redis 缓存实现验证码的生存时间 (TTL)管理与防刷限制。
+    \item \textbf{理论支撑}：通过多因素认证 (MFA)机制，利用手机号的实名属性提升账户体系的安全性与合规性。
+\end{itemize}
+
+\subsubsection{2. 支付交易的一致性保障（Mock $\rightarrow$ Sandbox）}
+\begin{itemize}
+    \item \textbf{拟定采取技术分析}：当前基于本地事务的模拟扣费无法覆盖网络延迟、掉单等真实支付场景。
+    \item \textbf{可以改进的策略}：接入第三方支付（如支付宝沙箱），引入RSA 非对称加密进行签名验签。
+    \item \textbf{理论支撑}：重点解决分布式环境下的最终一致性问题，通过设计幂等性接口处理异步回调通知，确保资金流转的准确无误。
+\end{itemize}
+
+\subsection{功能完善与优化规划}
+
+\subsubsection{1. 实时通讯系统的构建}
+\begin{itemize}
+    \item \textbf{技术难点描述}：代练业务强依赖于实时沟通（如扫码登录、战况汇报），当前的静态备注无法满足交互需求。
+    \item \textbf{解决方案}：构建基于WebSocket的通信协议的聊天室模块，上学期实现过类似的板块，有一定经验。
+\end{itemize}
+
+\subsubsection{2. 生成式 AI 的不确定性控制}
+\begin{itemize}
+    \item \textbf{技术难点描述}：大语言模型 (LLM) 存在固有的概率性特征，可能产生“幻觉”或输出非标准化的 JSON 数据，导致后端解析服务崩溃或业务逻辑错误。
+    \item \textbf{解决方案}：在发送给 AI 的提示词中，直接提供 3 个标准的“问题和答案”的范例，让 AI 模仿范例的格式输出，大幅降低格式错误的概率。同时在后端代码增加异常捕获机制，一旦检测到 AI 返回的数据无法解析，程序会自动重新请求一次 API（设定最多重试 3 次），超过3次后，系统不会报错卡死，而是自动切换到手动提交模式，直接给用户展示一个空表单，引导用户手动选择段位和游戏，确保下单流程不中断。
+\end{itemize}
+\end{document}

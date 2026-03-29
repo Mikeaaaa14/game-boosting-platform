@@ -1,0 +1,228 @@
+"""
+User and authentication schemas module.
+Pydantic models for user-related API request/response validation.
+"""
+
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.models.user import UserRole
+
+
+# =============================================================================
+# INPUT SCHEMAS (Request Bodies)
+# =============================================================================
+
+class UserRegister(BaseModel):
+    """Schema for user registration."""
+    
+    email: EmailStr = Field(
+        ...,
+        description="邮箱地址",
+        examples=["user@example.com"],
+    )
+    
+    username: str = Field(
+        ...,
+        min_length=2,
+        max_length=50,
+        description="用户名",
+        examples=["玩家小明"],
+    )
+    
+    password: str = Field(
+        ...,
+        min_length=6,
+        max_length=100,
+        description="密码",
+        examples=["SecurePass123"],
+    )
+    
+    role: UserRole = Field(
+        default=UserRole.USER,
+        description="用户角色",
+    )
+    
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        """Validate username format."""
+        v = v.strip()
+        if not v:
+            raise ValueError("用户名不能为空")
+        return v
+    
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        """Validate password strength."""
+        if len(v) < 6:
+            raise ValueError("密码长度至少6位")
+        return v
+
+
+class UserLogin(BaseModel):
+    """Schema for user login."""
+    
+    email: EmailStr = Field(
+        ...,
+        description="邮箱地址",
+        examples=["user@example.com"],
+    )
+    
+    password: str = Field(
+        ...,
+        min_length=1,
+        description="密码",
+    )
+
+
+class UserUpdate(BaseModel):
+    """Schema for updating user profile."""
+    
+    username: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=50,
+        description="用户名",
+    )
+    
+    avatar_url: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="头像URL",
+    )
+    
+    phone: Optional[str] = Field(
+        default=None,
+        max_length=20,
+        description="手机号",
+    )
+    
+    bio: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="个人简介",
+    )
+
+
+class PasswordChange(BaseModel):
+    """Schema for changing password."""
+    
+    current_password: str = Field(
+        ...,
+        min_length=1,
+        description="当前密码",
+    )
+    
+    new_password: str = Field(
+        ...,
+        min_length=6,
+        max_length=100,
+        description="新密码",
+    )
+    
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        """Validate new password strength."""
+        if len(v) < 6:
+            raise ValueError("新密码长度至少6位")
+        return v
+
+
+# =============================================================================
+# OUTPUT SCHEMAS (Response Bodies)
+# =============================================================================
+
+class UserResponse(BaseModel):
+    """User response schema."""
+    
+    id: int = Field(description="用户ID")
+    email: str = Field(description="邮箱地址")
+    username: str = Field(description="用户名")
+    role: UserRole = Field(description="用户角色")
+    is_active: bool = Field(description="是否激活")
+    is_verified: bool = Field(description="是否验证")
+    avatar_url: Optional[str] = Field(default=None, description="头像URL")
+    phone: Optional[str] = Field(default=None, description="手机号")
+    bio: Optional[str] = Field(default=None, description="个人简介")
+    created_at: datetime = Field(description="注册时间")
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "email": "user@example.com",
+                "username": "玩家小明",
+                "role": "USER",
+                "is_active": True,
+                "is_verified": False,
+                "avatar_url": None,
+                "phone": None,
+                "bio": None,
+                "created_at": "2024-01-01T00:00:00",
+            }
+        }
+    )
+
+
+class TokenResponse(BaseModel):
+    """JWT token response schema."""
+    
+    access_token: str = Field(description="访问令牌")
+    refresh_token: str = Field(description="刷新令牌")
+    token_type: str = Field(default="bearer", description="令牌类型")
+    expires_in: int = Field(description="过期时间(秒)")
+    user: UserResponse = Field(description="用户信息")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer",
+                "expires_in": 1800,
+                "user": {
+                    "id": 1,
+                    "email": "user@example.com",
+                    "username": "玩家小明",
+                    "role": "USER",
+                    "is_active": True,
+                    "is_verified": False,
+                    "avatar_url": None,
+                    "phone": None,
+                    "bio": None,
+                    "created_at": "2024-01-01T00:00:00",
+                },
+            }
+        }
+    )
+
+
+class TokenRefresh(BaseModel):
+    """Schema for refreshing access token."""
+    
+    refresh_token: str = Field(
+        ...,
+        description="刷新令牌",
+    )
+
+
+class MessageResponse(BaseModel):
+    """Generic message response."""
+    
+    message: str = Field(description="消息内容")
+    success: bool = Field(default=True, description="是否成功")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "message": "操作成功",
+                "success": True,
+            }
+        }
+    )

@@ -1,0 +1,103 @@
+/**
+ * Vue Router configuration.
+ */
+
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+const routes = [
+  {
+    path: '/',
+    name: 'home',
+    component: () => import('@/views/HomeView.vue'),
+    meta: { title: '首页' },
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: { title: '登录', guest: true },
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/views/RegisterView.vue'),
+    meta: { title: '注册', guest: true },
+  },
+  {
+    path: '/orders',
+    name: 'orders',
+    component: () => import('@/views/OrderList.vue'),
+    meta: { title: '订单列表', requiresAuth: true },
+  },
+  {
+    path: '/orders/create',
+    name: 'order-create',
+    component: () => import('@/views/OrderCreate.vue'),
+    meta: { title: '发布订单', requiresAuth: true },
+  },
+  {
+    path: '/orders/:id',
+    name: 'order-detail',
+    component: () => import('@/views/OrderDetail.vue'),
+    meta: { title: '订单详情', requiresAuth: true },
+    props: true,
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('@/views/ProfileView.vue'),
+    meta: { title: '个人中心', requiresAuth: true },
+  },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/AdminView.vue'),
+    meta: { title: '管理员', requiresAuth: true, adminOnly: true },
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('@/views/NotFound.vue'),
+    meta: { title: '页面不存在' },
+  },
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    }
+    return { top: 0 }
+  },
+})
+
+router.beforeEach(async (to, from, next) => {
+  document.title = `${to.meta.title || '游戏代练平台'} - 游戏代练平台`
+
+  const authStore = useAuthStore()
+  if (authStore.accessToken && !authStore.user) {
+    await authStore.fetchCurrentUser()
+  }
+
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    next({ name: 'login', query: { redirect: to.fullPath } })
+    return
+  }
+
+  if (to.meta.adminOnly && !authStore.isAdmin) {
+    next({ name: 'home' })
+    return
+  }
+
+  if (to.meta.guest && authStore.isAuthenticated) {
+    next({ name: 'home' })
+    return
+  }
+
+  next()
+})
+
+export default router
