@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { GAME_IMAGES, PAGE_BACKGROUNDS, onImgError } from '@/data/gameImages.js'
 
 const authStore = useAuthStore()
 const isAuthenticated = computed(() => authStore.isAuthenticated)
@@ -219,7 +220,7 @@ function scrollScenes(direction) {
 
 <template>
   <div class="page-shell space-y-14">
-    <section class="hero-panel p-6 sm:p-8 lg:p-10">
+    <section class="hero-panel scanline-overlay p-6 sm:p-8 lg:p-10" style="background-image: linear-gradient(135deg, rgba(10,10,15,0.92), rgba(18,18,26,0.88)), url('https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1600&q=80'); background-size: cover; background-position: center;">
       <div class="absolute inset-y-0 right-0 hidden w-1/2 bg-gradient-to-l from-primary-400/10 via-transparent to-transparent lg:block"></div>
       <div class="grid gap-8 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
         <div class="space-y-6">
@@ -227,7 +228,7 @@ function scrollScenes(direction) {
           <div class="space-y-4">
             <h1 class="display-title max-w-3xl">
               把上分、冲段、代肝和赛季冲刺，
-              <span class="text-gradient">交给更懂游戏节奏的人</span>
+              <span class="cyber-gradient neon-text">交给更懂游戏节奏的人</span>
               去完成。
             </h1>
             <p class="section-copy max-w-2xl">
@@ -248,7 +249,7 @@ function scrollScenes(direction) {
             <div
               v-for="item in heroStats"
               :key="item.label"
-              class="stat-card"
+              class="stat-card cyber-corner"
             >
               <p class="text-2xl font-semibold text-white">{{ item.value }}</p>
               <p class="mt-1 text-sm text-slate-200">{{ item.label }}</p>
@@ -332,7 +333,7 @@ function scrollScenes(direction) {
         <article
           v-for="scene in activeGame.scenes"
           :key="`${activeGame.key}-${scene.title}`"
-          class="card-hover min-w-[280px] snap-start sm:min-w-[320px]"
+          class="card-hover scanline-overlay min-w-[280px] snap-start sm:min-w-[320px]"
         >
           <div class="flex items-center justify-between gap-3">
             <span class="tag">{{ activeGame.name }}</span>
@@ -348,7 +349,7 @@ function scrollScenes(direction) {
       <article
         v-for="item in servicePromises"
         :key="item.title"
-        class="card-hover"
+        class="card-hover cyber-corner"
       >
         <div class="flex items-center justify-between">
           <span class="tag">{{ item.tag }}</span>
@@ -372,9 +373,9 @@ function scrollScenes(direction) {
         <article
           v-for="(step, index) in journeySteps"
           :key="step.title"
-          class="card"
+          class="card cyber-corner"
         >
-          <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-500/10 text-sm font-semibold text-primary-100">
+          <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-500/10 text-sm font-semibold text-primary-100 border" style="border-color: rgba(0, 240, 255, 0.5); box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);">
             {{ index + 1 }}
           </div>
           <h3 class="mt-5 text-lg font-semibold text-white">{{ step.title }}</h3>
@@ -383,7 +384,7 @@ function scrollScenes(direction) {
       </div>
     </section>
 
-    <section class="surface-card p-6 text-center sm:p-8 lg:p-10">
+    <section class="surface-card scanline-overlay p-6 text-center sm:p-8 lg:p-10">
       <p class="eyebrow">开始下单</p>
       <h2 class="section-title mt-4">已经想好目标了，就把需求写出来。</h2>
       <p class="mx-auto mt-3 max-w-3xl text-sm leading-7 text-slate-400">
