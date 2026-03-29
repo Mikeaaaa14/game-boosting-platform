@@ -56,10 +56,10 @@ function togglePassword() {
 <template>
   <div class="page-shell">
     <div class="grid gap-8 lg:grid-cols-[1.04fr_0.96fr] lg:items-stretch">
-      <section class="hero-panel flex flex-col justify-between p-6 sm:p-8 lg:p-10">
+      <section class="hero-panel scanline-overlay flex flex-col justify-between p-6 sm:p-8 lg:p-10">
         <div class="space-y-5">
           <p class="eyebrow">账号入口</p>
-          <h1 class="section-title !text-4xl sm:!text-5xl">
+          <h1 class="section-title neon-text !text-4xl sm:!text-5xl">
             欢迎回来，继续处理你的上分订单和服务进度。
           </h1>
           <p class="section-copy max-w-2xl">
@@ -69,15 +69,15 @@ function togglePassword() {
 
         <div class="mt-8 grid gap-4">
           <div class="grid gap-4 sm:grid-cols-3">
-            <div class="stat-card">
+            <div class="stat-card cyber-corner">
               <p class="text-2xl font-semibold text-white">订单进度</p>
               <p class="mt-2 text-sm text-slate-400">查看已发布、已接单和已完成状态</p>
             </div>
-            <div class="stat-card">
+            <div class="stat-card cyber-corner">
               <p class="text-2xl font-semibold text-white">个人资料</p>
               <p class="mt-2 text-sm text-slate-400">补充联系方式、简介和常玩游戏</p>
             </div>
-            <div class="stat-card">
+            <div class="stat-card cyber-corner">
               <p class="text-2xl font-semibold text-white">接单认证</p>
               <p class="mt-2 text-sm text-slate-400">提交段位截图后可申请成为代练师</p>
             </div>
@@ -96,7 +96,7 @@ function togglePassword() {
         </div>
       </section>
 
-      <section class="surface-card p-6 sm:p-8 lg:p-10">
+      <section class="surface-card cyber-corner p-6 sm:p-8 lg:p-10">
         <div class="mb-8">
           <p class="text-sm font-medium text-primary-100">登录账号</p>
           <h2 class="mt-2 text-3xl font-semibold text-white">回到你的服务面板</h2>
