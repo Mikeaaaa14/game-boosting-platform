@@ -67,7 +67,7 @@ function togglePassword() {
 <template>
   <div class="page-shell">
     <div class="grid gap-8 lg:grid-cols-[0.98fr_1.02fr] lg:items-stretch">
-      <section class="surface-card p-6 sm:p-8 lg:p-10">
+      <section class="surface-card cyber-corner p-6 sm:p-8 lg:p-10">
         <div class="mb-8">
           <p class="text-sm font-medium text-primary-100">创建账号</p>
           <h1 class="mt-2 text-3xl font-semibold text-white sm:text-4xl">注册后即可发布需求、查看进度或申请接单</h1>
@@ -173,10 +173,10 @@ function togglePassword() {
         </div>
       </section>
 
-      <section class="hero-panel flex flex-col justify-between p-6 sm:p-8 lg:p-10">
+      <section class="hero-panel scanline-overlay flex flex-col justify-between p-6 sm:p-8 lg:p-10">
         <div class="space-y-5">
           <p class="eyebrow">注册后可做什么</p>
-          <h2 class="section-title !text-4xl sm:!text-5xl">
+          <h2 class="section-title neon-text !text-4xl sm:!text-5xl">
             想下单也好，想接单也好，都能从这里开始。
           </h2>
           <p class="section-copy max-w-2xl">
@@ -186,15 +186,15 @@ function togglePassword() {
 
         <div class="mt-8 space-y-4">
           <div class="grid gap-4 sm:grid-cols-3">
-            <div class="stat-card">
+            <div class="stat-card cyber-corner">
               <p class="text-2xl font-semibold text-white">1</p>
               <p class="mt-2 text-sm text-slate-400">创建账号</p>
             </div>
-            <div class="stat-card">
+            <div class="stat-card cyber-corner">
               <p class="text-2xl font-semibold text-white">2</p>
               <p class="mt-2 text-sm text-slate-400">完善个人资料</p>
             </div>
-            <div class="stat-card">
+            <div class="stat-card cyber-corner">
               <p class="text-2xl font-semibold text-white">3</p>
               <p class="mt-2 text-sm text-slate-400">发布需求或申请接单</p>
             </div>
