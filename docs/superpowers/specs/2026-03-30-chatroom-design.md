@@ -19,6 +19,8 @@
 | 消息撤回 | 发送后 2 分钟内可撤回，双方可见撤回提示 |
 | 消息删除 | 仅对自己隐藏，对方和管理员仍可见 |
 | 已读回执 | 支持，显示"已读"标记 |
+| 输入中提示 | 支持，对方正在输入时显示提示 |
+| 消息搜索 | 支持对话内全文搜索 |
 | 订单取消后 | 双方仍可继续聊天 |
 | 未读角标 | 顶部导航栏全局显示 |
 | V1 聊天入口 | 仅通过订单发起（订单详情页"联系发单人"） |
@@ -111,6 +113,7 @@
 | POST | `/messages/{id}/recall` | 撤回消息 | 消息发送者 |
 | DELETE | `/messages/{id}` | 删除消息（仅自己不可见） | 消息可见者 |
 | POST | `/conversations/{id}/invite-admin` | 邀请管理员介入 | 对话参与者（非管理员） |
+| GET | `/conversations/{id}/messages/search` | 对话内消息搜索 | 对话参与者 |
 | GET | `/unread-summary` | 未读汇总 | 登录用户 |
 
 ### 3.2 端点详细逻辑
@@ -194,6 +197,19 @@
 返回: 成功状态
 ```
 
+#### `GET /conversations/{id}/messages/search`
+
+```
+查询参数: q (搜索关键词), limit (默认 20)
+逻辑:
+  1. 校验当前用户是对话参与者
+  2. 在该对话的消息中搜索 content LIKE %q%
+  3. 排除当前用户已删除的消息和已撤回的消息
+  4. 按 created_at 降序返回匹配结果
+  5. 每条结果包含前后文（消息本身 + 时间 + 发送者）
+返回: 匹配的消息列表
+```
+
 #### `POST /conversations/{id}/invite-admin`
 
 ```
@@ -219,7 +235,7 @@ WS /api/v1/chat/ws?token=<jwt_access_token>
 1. 验证 JWT token
 2. 注册到 ConnectionManager
 3. 维持心跳（客户端 30s ping，服务端 pong，60s 超时断开）
-4. 接收并忽略客户端文本帧（V1 不处理上行业务消息）
+4. 接收客户端上行事件（typing indicator）
 
 **下行事件：**
 
@@ -229,6 +245,15 @@ WS /api/v1/chat/ws?token=<jwt_access_token>
 | `message_recalled` | 消息被撤回 | conversation_id, message_id, recalled_by |
 | `message_read` | 对方标记已读 | conversation_id, user_id, last_read_message_id |
 | `admin_joined` | 管理员加入对话 | conversation_id, admin 信息 |
+| `typing` | 对方正在输入 | conversation_id, user_id |
+
+**上行事件（客户端 → 服务端）：**
+
+| event | 说明 | data |
+|-------|------|------|
+| `typing` | 通知对方正在输入 | conversation_id |
+
+typing 事件为纯转发，不持久化。服务端收到后直接广播给对话中的其他在线参与者。客户端节流：最多每 3 秒发送一次。前端收到后显示"对方正在输入..."，5 秒无新 typing 事件则隐藏。
 
 ---
 
@@ -266,6 +291,7 @@ class ChatService:
 
     # 消息操作
     list_messages(conversation_id, user_id, before_id?, limit=30) -> list[Message]
+    search_messages(conversation_id, user_id, query, limit=20) -> list[Message]
     send_message(conversation_id, sender_id, content) -> Message
     send_image_message(conversation_id, sender_id, file) -> Message
     send_system_message(conversation_id, content, meta?) -> Message
@@ -331,12 +357,14 @@ State:
   unreadByConversation         — { [convId]: number }
   socket                       — WebSocket 实例
   socketStatus                 — 'disconnected' | 'connecting' | 'connected'
+  typingUsers                  — { [convId]: { userId, timeout } }
   loading                      — 加载状态
   hasMore                      — { [convId]: boolean }
 
 Actions:
   fetchConversations()
   fetchMessages(convId, beforeId?)
+  searchMessages(convId, query)
   sendMessage(convId, content)
   sendImage(convId, file)
   startConversation(targetUserId, orderId?)
@@ -345,6 +373,7 @@ Actions:
   deleteMessage(messageId)
   inviteAdmin(convId)
   fetchUnreadSummary()
+  sendTyping(convId)
   connectWebSocket()
   disconnectWebSocket()
   handleWsMessage(event)
@@ -368,7 +397,9 @@ frontend/src/components/chat/
   ├── ChatMessageBubble.vue      — 单条消息气泡
   ├── ChatComposer.vue           — 输入框 + 发送按钮 + 图片选择
   ├── ChatConversationList.vue   — 对话列表页
-  └── ChatUnreadBadge.vue        — 未读角标（导航栏用）
+  ├── ChatUnreadBadge.vue        — 未读角标（导航栏用）
+  ├── ChatSearchBar.vue          — 对话内消息搜索
+  └── ChatTypingIndicator.vue    — "对方正在输入..."提示
 ```
 
 ### 5.4 新增路由
@@ -489,7 +520,7 @@ location /api/v1/chat/ws {
 
 - [ ] ConnectionManager（内存连接管理）
 - [ ] WebSocket 端点（认证、心跳、下行推送）
-- [ ] 新消息广播、撤回广播、已读广播、管理员加入广播
+- [ ] 新消息广播、撤回广播、已读广播、管理员加入广播、typing 转发
 - [ ] Nginx WebSocket 代理配置
 - [ ] Vite 开发 WS 代理配置
 
@@ -503,6 +534,8 @@ location /api/v1/chat/ws {
 - [ ] 图片选择与展示
 - [ ] 撤回操作 UI
 - [ ] 已读回执展示
+- [ ] 输入中提示（typing indicator）
+- [ ] 对话内消息搜索
 
 ### Phase 4：体验完善
 
@@ -519,9 +552,7 @@ location /api/v1/chat/ws {
 ## 9. 不在 V1 范围
 
 - 消息编辑
-- 输入中提示（typing indicator）
-- 消息全文搜索
 - Push 通知
-- Redis pub/sub 多实例
+- Redis pub/sub 多实例（多后端实例间 WebSocket 同步，当前单实例不需要）
 - 代练市场（独立 spec）
 - 文件/视频发送（仅图片）
