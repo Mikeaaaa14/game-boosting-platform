@@ -3,18 +3,14 @@ Orders API endpoints.
 Handles order creation, listing, and management operations.
 """
 
-import json
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     CurrentUser,
     DatabaseSession,
-    OptionalCurrentUser,
     get_current_booster,
-    get_current_user,
 )
 from app.models.order import OrderStatus
 from app.models.user import User, UserRole
@@ -27,8 +23,9 @@ from app.schemas.order import (
     OrderUpdate,
 )
 from app.schemas.user import MessageResponse
+from app.api.chat_utils import send_order_system_message
 from app.services.ai_service import LLMService, get_llm_service
-from app.services.order_service import OrderService, get_order_service
+from app.services.order_service import get_order_service
 
 router = APIRouter(prefix="/orders", tags=["订单"])
 
@@ -41,6 +38,7 @@ router = APIRouter(prefix="/orders", tags=["订单"])
 )
 async def analyze_requirement(
     request: OrderAnalyzeRequest,
+    db: DatabaseSession,
     llm_service: Annotated[LLMService, Depends(get_llm_service)],
 ) -> AIAnalysisResponse:
     """
@@ -57,7 +55,8 @@ async def analyze_requirement(
     - server: Game server/region
     - is_risky: Flag for prohibited content
     """
-    result = await llm_service.analyze_requirement(request.description)
+    order_service = get_order_service(db)
+    result = await order_service.analyze_requirement(request.description, llm_service)
     
     # Check for risky content
     if result.get("is_risky", False):
@@ -67,12 +66,15 @@ async def analyze_requirement(
         )
     
     return AIAnalysisResponse(
+        game_id=result.get("game_id"),
         game_name=result.get("game_name"),
         current_rank=result.get("current_rank"),
         target_rank=result.get("target_rank"),
         price=result.get("price"),
         role=result.get("role"),
         server=result.get("server"),
+        service_type=result.get("service_type"),
+        ai_tags=result.get("ai_tags"),
         is_risky=result.get("is_risky", False),
     )
 
@@ -251,6 +253,16 @@ async def accept_order(
     order_service = get_order_service(db)
     
     order = await order_service.accept_order(order_id, current_user)
+    await send_order_system_message(
+        db=db,
+        order_id=order.id,
+        content=f"代练 {current_user.username} 已接单",
+        meta_json={
+            "event": "order_accepted",
+            "order_id": order.id,
+            "booster_id": current_user.id,
+        },
+    )
     
     return OrderResponse.model_validate(order)
 
@@ -275,6 +287,15 @@ async def complete_order(
     order_service = get_order_service(db)
     
     order = await order_service.complete_order(order_id, current_user)
+    await send_order_system_message(
+        db=db,
+        order_id=order.id,
+        content="订单已完成",
+        meta_json={
+            "event": "order_completed",
+            "order_id": order.id,
+        },
+    )
     
     return OrderResponse.model_validate(order)
 
@@ -300,6 +321,16 @@ async def cancel_order(
     order_service = get_order_service(db)
     
     order = await order_service.cancel_order(order_id, current_user)
+    await send_order_system_message(
+        db=db,
+        order_id=order.id,
+        content="订单已取消",
+        meta_json={
+            "event": "order_cancelled",
+            "order_id": order.id,
+            "operator_id": current_user.id,
+        },
+    )
     
     return OrderResponse.model_validate(order)
 
@@ -328,7 +359,52 @@ async def dispute_order(
     order_service = get_order_service(db)
     
     order = await order_service.dispute_order(order_id, current_user, reason)
+    await send_order_system_message(
+        db=db,
+        order_id=order.id,
+        content=f"{current_user.username} 发起了纠纷",
+        meta_json={
+            "event": "order_disputed",
+            "order_id": order.id,
+            "operator_id": current_user.id,
+            "reason": reason,
+        },
+    )
     
+    return OrderResponse.model_validate(order)
+
+
+@router.put(
+    "/{order_id}/pay",
+    response_model=OrderResponse,
+    summary="确认支付",
+    description="模拟支付订单",
+)
+async def pay_order(
+    order_id: int,
+    current_user: CurrentUser,
+    db: DatabaseSession,
+) -> OrderResponse:
+    """Simulate payment for an order. Only order owner can pay."""
+    order_service = get_order_service(db)
+    order = await order_service.pay_order(order_id, current_user)
+    return OrderResponse.model_validate(order)
+
+
+@router.put(
+    "/{order_id}/refund",
+    response_model=OrderResponse,
+    summary="退款",
+    description="管理员退款（订单须为已取消或争议状态）",
+)
+async def refund_order(
+    order_id: int,
+    current_user: CurrentUser,
+    db: DatabaseSession,
+) -> OrderResponse:
+    """Refund a paid order. Admin only, order must be CANCELLED or DISPUTED."""
+    order_service = get_order_service(db)
+    order = await order_service.refund_order(order_id, current_user)
     return OrderResponse.model_validate(order)
 
 

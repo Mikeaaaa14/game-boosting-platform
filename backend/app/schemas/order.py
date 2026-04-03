@@ -5,9 +5,11 @@ Pydantic models for order-related API request/response validation.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.models.order import PaymentStatus
 
 
 # =============================================================================
@@ -29,24 +31,31 @@ class OrderAnalyzeRequest(BaseModel):
 class OrderCreate(BaseModel):
     """Schema for creating a new order after AI analysis."""
     
-    game_name: str = Field(
-        ...,
+    game_id: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="游戏ID",
+        examples=[1],
+    )
+
+    game_name: Optional[str] = Field(
+        default=None,
         min_length=1,
         max_length=100,
         description="游戏名称",
         examples=["王者荣耀", "英雄联盟", "和平精英"],
     )
     
-    current_rank: str = Field(
-        ...,
+    current_rank: Optional[str] = Field(
+        default=None,
         min_length=1,
         max_length=50,
         description="当前段位",
         examples=["钻石", "黄金", "铂金"],
     )
     
-    target_rank: str = Field(
-        ...,
+    target_rank: Optional[str] = Field(
+        default=None,
         min_length=1,
         max_length=50,
         description="目标段位",
@@ -72,6 +81,11 @@ class OrderCreate(BaseModel):
         max_length=2000,
         description="AI处理后的描述",
     )
+
+    ai_tags: dict[str, Any] | None = Field(
+        default=None,
+        description="AI 提取的结构化标签",
+    )
     
     game_account: Optional[str] = Field(
         default=None,
@@ -90,6 +104,13 @@ class OrderCreate(BaseModel):
         max_length=50,
         description="游戏区服",
         examples=["微信区", "QQ区", "艾欧尼亚"],
+    )
+
+    service_type: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="服务类型",
+        examples=["代练上分", "陪玩", "教学"],
     )
     
     role: Optional[str] = Field(
@@ -121,17 +142,28 @@ class OrderCreate(BaseModel):
             v = v.replace("¥", "").replace("元", "").replace(",", "").strip()
         return Decimal(str(v))
 
+    @model_validator(mode="after")
+    def validate_game_reference(self) -> "OrderCreate":
+        if self.game_id is None and not self.game_name:
+            raise ValueError("game_id 和 game_name 至少需要提供一个")
+        return self
+
 
 class OrderUpdate(BaseModel):
     """Schema for updating an existing order."""
     
     game_name: Optional[str] = Field(default=None, max_length=100)
+    game_id: Optional[int] = Field(default=None, ge=1)
     current_rank: Optional[str] = Field(default=None, max_length=50)
     target_rank: Optional[str] = Field(default=None, max_length=50)
     price: Optional[Decimal] = Field(default=None, gt=0, le=100000)
     description_raw: Optional[str] = Field(default=None, max_length=2000)
+    description_ai: Optional[str] = Field(default=None, max_length=2000)
+    ai_tags: dict[str, Any] | None = None
     game_account: Optional[str] = Field(default=None, max_length=255)
     game_password: Optional[str] = Field(default=None, max_length=255)
+    service_type: Optional[str] = Field(default=None, max_length=100)
+    server: Optional[str] = Field(default=None, max_length=100)
     priority: Optional[int] = Field(default=None, ge=0, le=10)
     notes: Optional[str] = Field(default=None, max_length=1000)
 
@@ -143,23 +175,39 @@ class OrderUpdate(BaseModel):
 class AIAnalysisResponse(BaseModel):
     """Schema for AI analysis result."""
     
+    game_id: Optional[int] = Field(default=None, description="游戏ID")
     game_name: Optional[str] = Field(default=None, description="游戏名称")
     current_rank: Optional[str] = Field(default=None, description="当前段位")
     target_rank: Optional[str] = Field(default=None, description="目标段位")
     price: Optional[float] = Field(default=None, description="预算金额")
     role: Optional[str] = Field(default=None, description="游戏位置")
     server: Optional[str] = Field(default=None, description="游戏区服")
+    service_type: Optional[str] = Field(default=None, description="服务类型")
+    ai_tags: dict[str, Any] | None = Field(default=None, description="结构化标签")
     is_risky: bool = Field(default=False, description="是否包含违规内容")
     
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
+                "game_id": 1,
                 "game_name": "王者荣耀",
                 "current_rank": "钻石",
                 "target_rank": "王者",
                 "price": 500.0,
                 "role": "中单",
                 "server": "微信区",
+                "service_type": "代练上分",
+                "ai_tags": {
+                    "game_id": 1,
+                    "server": "微信区",
+                    "service_type": "代练上分",
+                    "detail": {
+                        "current_rank": "钻石",
+                        "target_rank": "王者",
+                        "role": "中单",
+                        "requirements": [],
+                    },
+                },
                 "is_risky": False,
             }
         }
@@ -182,6 +230,8 @@ class OrderResponse(BaseModel):
     id: int = Field(description="订单ID")
     user_id: int = Field(description="用户ID")
     booster_id: Optional[int] = Field(default=None, description="代练ID")
+    game_id: Optional[int] = Field(default=None, description="游戏ID")
+    service_id: Optional[int] = Field(default=None, description="服务ID")
     game_name: str = Field(description="游戏名称")
     current_rank: str = Field(description="当前段位")
     target_rank: str = Field(description="目标段位")
@@ -189,7 +239,10 @@ class OrderResponse(BaseModel):
     status: str = Field(description="订单状态")
     description_raw: Optional[str] = Field(default=None, description="原始描述")
     description_ai: Optional[str] = Field(default=None, description="AI描述")
+    ai_tags: dict[str, Any] | None = Field(default=None, description="AI标签")
     game_account: Optional[str] = Field(default=None, description="游戏账号")
+    service_type: Optional[str] = Field(default=None, description="服务类型")
+    server: Optional[str] = Field(default=None, description="游戏区服")
     priority: int = Field(description="优先级")
     notes: Optional[str] = Field(default=None, description="备注")
     created_at: datetime = Field(description="创建时间")
@@ -197,6 +250,9 @@ class OrderResponse(BaseModel):
     locked_at: Optional[datetime] = Field(default=None, description="锁定时间")
     completed_at: Optional[datetime] = Field(default=None, description="完成时间")
     
+    payment_status: str = Field(default=PaymentStatus.UNPAID.value, description="支付状态")
+    paid_at: Optional[datetime] = Field(default=None, description="支付时间")
+
     # Nested user information
     user: Optional[UserBrief] = Field(default=None, description="下单用户")
     booster: Optional[UserBrief] = Field(default=None, description="接单代练")
@@ -208,6 +264,8 @@ class OrderResponse(BaseModel):
                 "id": 1,
                 "user_id": 1,
                 "booster_id": None,
+                "game_id": 1,
+                "service_id": None,
                 "game_name": "王者荣耀",
                 "current_rank": "钻石",
                 "target_rank": "王者",
@@ -215,7 +273,10 @@ class OrderResponse(BaseModel):
                 "status": "PENDING",
                 "description_raw": "钻石上王者，预算500",
                 "description_ai": None,
+                "ai_tags": None,
                 "game_account": None,
+                "service_type": "代练上分",
+                "server": "微信区",
                 "priority": 0,
                 "notes": None,
                 "created_at": "2024-01-01T00:00:00",
