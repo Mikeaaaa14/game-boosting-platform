@@ -52,6 +52,7 @@ services:
     environment:
       # Database configuration
       DB_URL: mysql+aiomysql://${MYSQL_USER:-boosting_user}:${MYSQL_PASSWORD:-boosting_password}@db:3306/${MYSQL_DATABASE:-game_boosting}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
       # API Keys
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-your_api_key_here}
       SECRET_KEY: ${SECRET_KEY:-your_super_secret_key_change_in_production}

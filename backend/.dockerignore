@@ -30,11 +30,6 @@ venv/
 # Logs
 *.log
 
-# Testing
-tests/
-pytest.ini
-conftest.py
-
 # Documentation
 README.md
 docs/
