@@ -6,15 +6,17 @@ Defines the Order entity for game boosting service requests.
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum as PyEnum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Enum, ForeignKey, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.booster_service import BoosterService
+    from app.models.game import Game
     from app.models.user import User
 
 
@@ -29,6 +31,14 @@ class OrderStatus(str, PyEnum):
     COMPLETED = "COMPLETED"     # Order successfully completed
     DISPUTED = "DISPUTED"       # Order has an issue requiring resolution
     CANCELLED = "CANCELLED"     # Order was cancelled
+
+
+class PaymentStatus(str, PyEnum):
+    """Payment status for orders."""
+
+    UNPAID = "UNPAID"
+    PAID = "PAID"
+    REFUNDED = "REFUNDED"
 
 
 class Order(Base):
@@ -63,6 +73,18 @@ class Order(Base):
         nullable=True,
         index=True,
     )
+
+    game_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("games.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("booster_services.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     
     # Game information
     game_name: Mapped[str] = mapped_column(
@@ -79,6 +101,23 @@ class Order(Base):
     target_rank: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
+    )
+
+    ai_tags: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    service_type: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+    )
+
+    server: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
     )
     
     # Pricing
@@ -143,6 +182,22 @@ class Order(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(
         nullable=True,
     )
+
+    payment_status: Mapped[PaymentStatus] = mapped_column(
+        Enum(
+            PaymentStatus,
+            name="payment_status_enum",
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        default=PaymentStatus.UNPAID,
+        server_default="UNPAID",
+        nullable=False,
+        index=True,
+    )
+
+    paid_at: Mapped[Optional[datetime]] = mapped_column(
+        nullable=True,
+    )
     
     # Additional metadata
     priority: Mapped[int] = mapped_column(
@@ -167,6 +222,16 @@ class Order(Base):
         "User",
         back_populates="orders_as_booster",
         foreign_keys=[booster_id],
+        lazy="joined",
+    )
+
+    game: Mapped[Optional["Game"]] = relationship(
+        "Game",
+        lazy="joined",
+    )
+
+    booster_service: Mapped[Optional["BoosterService"]] = relationship(
+        "BoosterService",
         lazy="joined",
     )
     
