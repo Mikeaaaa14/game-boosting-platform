@@ -15,6 +15,7 @@ from app.models.chat import (
 from app.models.booster_service import BoosterService
 from app.models.game import Game, GameCategory, GamePlatform
 from app.models.order import Order, OrderStatus, PaymentStatus
+from app.models.review import Review
 from app.models.user import BoosterApplicationStatus, User, UserRole
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "Order",
     "OrderStatus",
     "PaymentStatus",
+    "Review",
 ]
