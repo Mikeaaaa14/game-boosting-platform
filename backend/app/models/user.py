@@ -184,7 +184,7 @@ class User(Base):
         back_populates="user",
         foreign_keys="Order.user_id",
         lazy="selectin",
-        cascade="all, delete-orphan",
+        cascade="save-update, merge",
     )
     
     # Orders assigned to this user (as booster)
