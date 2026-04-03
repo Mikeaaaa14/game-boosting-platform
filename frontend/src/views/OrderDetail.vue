@@ -1,8 +1,12 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOrdersStore } from '@/stores/orders'
+
 import { useAuthStore } from '@/stores/auth'
+import { useChatStore } from '@/stores/chat'
+import { useOrdersStore } from '@/stores/orders'
+import { getGameImage } from '@/data/gameImages'
+import api from '@/utils/api'
 import { formatDateTime, formatPrice } from '@/utils/display'
 import { getOrderStatusBadgeClass, getOrderStatusLabel, getOrderStatusMeta } from '@/utils/order'
 
@@ -14,20 +18,55 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const ordersStore = useOrdersStore()
 const authStore = useAuthStore()
+const chatStore = useChatStore()
+const ordersStore = useOrdersStore()
 
 const errorMessage = ref('')
 const successMessage = ref('')
 const actionLoading = ref(false)
+const chatLoading = ref(false)
+const reviews = ref([])
+const reviewForm = ref({ rating: 5, content: '' })
+const editingReview = ref(false)
 
 const order = computed(() => ordersStore.currentOrder)
 const loading = computed(() => ordersStore.loading)
 const currentUser = computed(() => authStore.user)
 const isBooster = computed(() => authStore.isBooster)
+const isAdmin = computed(() => authStore.isAdmin)
 const isOwner = computed(() => order.value?.user_id === currentUser.value?.id)
 const isAssignedBooster = computed(() => order.value?.booster_id === currentUser.value?.id)
+const canContactOrderOwner = computed(() => {
+  if (!order.value?.user_id || isOwner.value) {
+    return false
+  }
+  return isBooster.value || isAdmin.value
+})
 const statusMeta = computed(() => getOrderStatusMeta(order.value?.status))
+const heroStyle = computed(() => {
+  const visual = getGameImage(order.value?.game_name)
+  return {
+    backgroundImage: visual.hero
+      ? `linear-gradient(115deg, rgba(10,10,15,0.94), rgba(18,18,26,0.82)), url('${visual.hero}')`
+      : 'linear-gradient(135deg, rgba(10,10,15,0.96), rgba(18,18,26,0.88))',
+    backgroundPosition: 'center',
+    backgroundSize: 'cover',
+  }
+})
+
+const detailCards = computed(() => {
+  if (!order.value) {
+    return []
+  }
+
+  return [
+    { icon: 'S', label: '服务', value: order.value.service_type || '未指定' },
+    { icon: 'R', label: '区服', value: order.value.server || '未指定' },
+    { icon: '$', label: '金额', value: formatPrice(order.value.price) },
+    { icon: 'T', label: '发布时间', value: formatDateTime(order.value.created_at) },
+  ]
+})
 
 const timeline = computed(() => {
   if (!order.value) {
@@ -35,70 +74,81 @@ const timeline = computed(() => {
   }
 
   return [
+    { title: '发布', time: formatDateTime(order.value.created_at), active: true },
     {
-      title: '订单发布',
-      time: formatDateTime(order.value.created_at),
-      active: true,
-    },
-    {
-      title: '代练接单',
+      title: '接单',
       time: order.value.locked_at ? formatDateTime(order.value.locked_at) : '待接单',
       active: ['LOCKED', 'COMPLETED', 'DISPUTED'].includes(order.value.status),
     },
     {
-      title: '订单完成',
-      time: order.value.completed_at ? formatDateTime(order.value.completed_at) : '尚未完成',
+      title: '完成',
+      time: order.value.completed_at ? formatDateTime(order.value.completed_at) : '未完成',
       active: order.value.status === 'COMPLETED',
     },
   ]
 })
 
-const detailItems = computed(() => {
-  if (!order.value) {
-    return []
+const canReview = computed(() => {
+  if (!order.value || !currentUser.value) {
+    return false
   }
-
-  return [
-    { label: '订单编号', value: `#${order.value.id}` },
-    { label: '创建时间', value: formatDateTime(order.value.created_at) },
-    { label: '最近更新', value: formatDateTime(order.value.updated_at) },
-    { label: '优先级', value: `${order.value.priority ?? 0}` },
-    { label: '游戏账号', value: order.value.game_account || '未填写' },
-  ]
+  return order.value.user_id === currentUser.value.id || order.value.booster_id === currentUser.value.id
 })
 
-const actionHint = computed(() => {
-  if (!order.value) {
-    return '订单不存在或你暂时没有访问权限。'
-  }
-
-  if (isAssignedBooster.value && order.value.status === 'LOCKED') {
-    return '你已接下此单，完成服务后可在这里提交完成状态。'
-  }
-
-  if (isBooster.value && order.value.status === 'PENDING' && !isOwner.value) {
-    return '这是一个可接订单，确认时间和要求合适后即可接单。'
-  }
-
-  if (isOwner.value && order.value.status === 'PENDING') {
-    return '订单尚未被接走，如需调整可取消后重新发布。'
-  }
-
-  return statusMeta.value.description
+const hasReviewed = computed(() => {
+  return reviews.value.some((review) => review.reviewer_id === currentUser.value?.id)
 })
+
+function compactSummary() {
+  const detail = order.value?.ai_tags?.detail || {}
+  const requirements = Array.isArray(detail.requirements) ? detail.requirements.filter(Boolean) : []
+  const items = [
+    detail.role,
+    requirements[0],
+    order.value?.description_raw,
+  ].filter(Boolean)
+
+  const summary = items[0] || '未补充需求'
+  return summary.length > 36 ? `${summary.slice(0, 36)}...` : summary
+}
+
+function paymentLabel(paymentStatus) {
+  if (paymentStatus === 'PAID') {
+    return '已支付'
+  }
+  if (paymentStatus === 'REFUNDED') {
+    return '已退款'
+  }
+  return '待支付'
+}
+
+function paymentBadgeClass(paymentStatus) {
+  return {
+    tag: true,
+    '!bg-yellow-500/20 !text-yellow-300 !border-yellow-500/30': paymentStatus === 'UNPAID',
+    '!bg-green-500/20 !text-green-300 !border-green-500/30': paymentStatus === 'PAID',
+    '!bg-slate-500/20 !text-slate-300 !border-slate-500/30': paymentStatus === 'REFUNDED',
+  }
+}
+
+function syncOrderState(updatedOrder) {
+  ordersStore.currentOrder = updatedOrder
+  const index = ordersStore.orders.findIndex((item) => item.id === updatedOrder.id)
+  if (index !== -1) {
+    ordersStore.orders[index] = updatedOrder
+  }
+}
 
 async function handleAccept() {
   actionLoading.value = true
   errorMessage.value = ''
   successMessage.value = ''
-
   const result = await ordersStore.acceptOrder(order.value.id)
   if (result.success) {
-    successMessage.value = '接单成功，订单已进入进行中状态。'
+    successMessage.value = '已接单'
   } else {
     errorMessage.value = result.error
   }
-
   actionLoading.value = false
 }
 
@@ -106,46 +156,130 @@ async function handleComplete() {
   actionLoading.value = true
   errorMessage.value = ''
   successMessage.value = ''
-
   const result = await ordersStore.completeOrder(order.value.id)
   if (result.success) {
-    successMessage.value = '订单已标记为完成。'
+    successMessage.value = '已完成'
+    await fetchReviews()
   } else {
     errorMessage.value = result.error
   }
-
   actionLoading.value = false
 }
 
 async function handleCancel() {
-  if (!confirm('确定要取消此订单吗？')) {
+  if (!window.confirm('确定取消这条订单吗？')) {
     return
   }
+  actionLoading.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+  const result = await ordersStore.cancelOrder(order.value.id)
+  if (result.success) {
+    successMessage.value = '已取消'
+  } else {
+    errorMessage.value = result.error
+  }
+  actionLoading.value = false
+}
 
+async function handlePay() {
   actionLoading.value = true
   errorMessage.value = ''
   successMessage.value = ''
 
-  const result = await ordersStore.cancelOrder(order.value.id)
-  if (result.success) {
-    successMessage.value = '订单已取消。'
-  } else {
-    errorMessage.value = result.error
+  try {
+    const resp = await api.put(`/orders/${order.value.id}/pay`)
+    syncOrderState(resp.data)
+    successMessage.value = '支付成功'
+  } catch (err) {
+    errorMessage.value = err.message || '支付失败'
   }
 
   actionLoading.value = false
 }
 
-onMounted(() => {
-  ordersStore.fetchOrder(props.id)
+async function handleRefund() {
+  actionLoading.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  try {
+    const resp = await api.put(`/orders/${order.value.id}/refund`)
+    syncOrderState(resp.data)
+    successMessage.value = '退款成功'
+  } catch (err) {
+    errorMessage.value = err.message || '退款失败'
+  }
+
+  actionLoading.value = false
+}
+
+async function handleStartConversation() {
+  if (!order.value?.user_id) {
+    return
+  }
+
+  chatLoading.value = true
+  errorMessage.value = ''
+  const result = await chatStore.startConversation(order.value.user_id, order.value.id)
+  if (result.success) {
+    router.push({ name: 'chat-detail', params: { id: result.data.id } })
+  } else {
+    errorMessage.value = result.error
+  }
+  chatLoading.value = false
+}
+
+async function fetchReviews() {
+  if (!order.value || order.value.status !== 'COMPLETED') {
+    reviews.value = []
+    return
+  }
+
+  try {
+    const resp = await api.get(`/orders/${order.value.id}/reviews`)
+    reviews.value = resp.data.items || []
+  } catch {
+    reviews.value = []
+  }
+}
+
+function startEditReview(review) {
+  reviewForm.value = { rating: review.rating, content: review.content || '' }
+  editingReview.value = true
+}
+
+async function submitReview() {
+  errorMessage.value = ''
+  successMessage.value = ''
+  const isEditing = editingReview.value
+
+  try {
+    if (isEditing) {
+      await api.put(`/orders/${order.value.id}/reviews`, reviewForm.value)
+    } else {
+      await api.post(`/orders/${order.value.id}/reviews`, reviewForm.value)
+    }
+    editingReview.value = false
+    reviewForm.value = { rating: 5, content: '' }
+    successMessage.value = isEditing ? '评价已更新' : '评价已提交'
+    await fetchReviews()
+  } catch (err) {
+    errorMessage.value = err.message || '评价失败'
+  }
+}
+
+onMounted(async () => {
+  const result = await ordersStore.fetchOrder(props.id)
+  if (result.success) {
+    await fetchReviews()
+  }
 })
 </script>
 
 <template>
   <div class="page-shell space-y-6">
-    <button class="btn-ghost self-start !px-0 text-sm" @click="router.back()">
-      返回订单列表
-    </button>
+    <button class="btn-ghost self-start !px-0 text-sm" @click="router.back()">返回</button>
 
     <div v-if="loading" class="surface-card flex items-center justify-center py-20">
       <svg class="h-10 w-10 animate-spin text-primary-300" fill="none" viewBox="0 0 24 24">
@@ -154,46 +288,40 @@ onMounted(() => {
       </svg>
     </div>
 
-    <div v-else-if="order" class="space-y-6">
-      <div v-if="errorMessage" class="message-error">
-        {{ errorMessage }}
-      </div>
-      <div v-if="successMessage" class="message-success">
-        {{ successMessage }}
-      </div>
+    <template v-else-if="order">
+      <div v-if="errorMessage" class="message-error">{{ errorMessage }}</div>
+      <div v-if="successMessage" class="message-success">{{ successMessage }}</div>
 
-      <section class="hero-panel p-6 sm:p-8 lg:p-10">
-        <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+      <section class="hero-panel scanline-overlay p-6 sm:p-8 lg:p-10" :style="heroStyle">
+        <div class="absolute inset-0 bg-gradient-to-r from-slate-950/92 via-slate-950/82 to-slate-950/64"></div>
+
+        <div class="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div class="space-y-4">
             <div class="flex flex-wrap items-center gap-3">
               <span class="tag">{{ order.game_name }}</span>
-              <span :class="getOrderStatusBadgeClass(order.status)">
-                {{ getOrderStatusLabel(order.status) }}
+              <span :class="getOrderStatusBadgeClass(order.status)">{{ getOrderStatusLabel(order.status) }}</span>
+              <span v-if="order.payment_status" :class="paymentBadgeClass(order.payment_status)">
+                {{ paymentLabel(order.payment_status) }}
               </span>
             </div>
-            <h1 class="section-title !text-4xl sm:!text-5xl">
-              {{ order.current_rank }}
-              <span class="mx-3 text-primary-300">→</span>
-              {{ order.target_rank }}
-            </h1>
-            <p class="section-copy max-w-3xl">
-              {{ statusMeta.description }}
-            </p>
+            <h1 class="section-title neon-text !text-4xl sm:!text-5xl">{{ order.current_rank }} -> {{ order.target_rank }}</h1>
+            <p class="text-sm text-slate-300">{{ compactSummary() }}</p>
           </div>
 
-          <div class="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-            <div class="stat-card">
-              <p class="text-sm text-slate-400">订单金额</p>
-              <p class="mt-2 text-3xl font-semibold text-accent-300">{{ formatPrice(order.price) }}</p>
-            </div>
-            <div class="stat-card">
-              <p class="text-sm text-slate-400">发布用户</p>
-              <p class="mt-2 text-lg font-semibold text-white">{{ order.user?.username || '未公开' }}</p>
-            </div>
-            <div class="stat-card">
-              <p class="text-sm text-slate-400">当前代练师</p>
-              <p class="mt-2 text-lg font-semibold text-white">{{ order.booster?.username || '尚未接单' }}</p>
-            </div>
+          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <article
+              v-for="item in detailCards"
+              :key="item.label"
+              class="stat-card flex items-center gap-4"
+            >
+              <div class="flex h-11 w-11 items-center justify-center rounded-[18px] border border-primary-300/35 bg-primary-500/10 text-lg font-semibold text-primary-100">
+                {{ item.icon }}
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ item.label }}</p>
+                <p class="mt-2 text-sm font-medium text-white">{{ item.value }}</p>
+              </div>
+            </article>
           </div>
         </div>
       </section>
@@ -201,127 +329,174 @@ onMounted(() => {
       <div class="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
         <section class="space-y-6">
           <article class="surface-card p-6 sm:p-8">
-            <h2 class="text-2xl font-semibold text-white">订单详情</h2>
-
-            <div class="mt-6 grid gap-4 sm:grid-cols-2">
-              <div
-                v-for="item in detailItems"
-                :key="item.label"
-                class="rounded-3xl border border-white/10 bg-white/5 p-4"
-              >
-                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ item.label }}</p>
-                <p class="mt-2 text-sm font-medium text-white">{{ item.value }}</p>
-              </div>
-            </div>
-
+            <h2 class="text-2xl font-semibold text-white">时间线</h2>
             <div class="mt-6 space-y-4">
-              <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <p class="text-sm font-medium text-primary-100">需求描述</p>
-                <p class="mt-3 text-sm leading-7 text-slate-300">
-                  {{ order.description_raw || '下单时未填写原始需求描述。' }}
-                </p>
-              </div>
-
-              <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <p class="text-sm font-medium text-primary-100">备注说明</p>
-                <p class="mt-3 text-sm leading-7 text-slate-300">
-                  {{ order.notes || '暂无备注。' }}
-                </p>
-              </div>
-            </div>
-          </article>
-
-          <article class="surface-card p-6 sm:p-8">
-            <h2 class="text-2xl font-semibold text-white">流程进度</h2>
-            <div class="mt-6 space-y-4">
-              <div
-                v-for="(item, index) in timeline"
-                :key="item.title"
-                class="flex gap-4"
-              >
+              <div v-for="(item, index) in timeline" :key="item.title" class="flex gap-4">
                 <div class="flex flex-col items-center">
                   <div
-                    class="flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-semibold"
-                    :class="item.active ? 'bg-primary-300 text-slate-950' : 'bg-white/5 text-slate-400'"
+                    class="flex h-10 w-10 items-center justify-center rounded-2xl border text-sm font-semibold"
+                    :class="item.active ? 'text-cyan-100' : 'text-slate-400'"
+                    :style="item.active
+                      ? 'border-color: rgba(0, 240, 255, 0.5); background: rgba(0, 240, 255, 0.08); box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);'
+                      : 'border-color: rgba(148, 163, 184, 0.18); background: rgba(15, 23, 42, 0.45);'"
                   >
                     {{ index + 1 }}
                   </div>
-                  <div v-if="index !== timeline.length - 1" class="mt-2 h-12 w-px bg-white/10"></div>
+                  <div
+                    v-if="index !== timeline.length - 1"
+                    class="mt-2 h-12 w-px rounded-full"
+                    :style="item.active
+                      ? 'background: linear-gradient(180deg, #00f0ff, #b829dd);'
+                      : 'background: rgba(255, 255, 255, 0.08);'"
+                  ></div>
                 </div>
-                <div class="rounded-3xl border border-white/10 bg-white/5 p-4 flex-1">
+                <div class="flex-1 rounded-3xl border border-white/10 bg-white/5 p-4">
                   <p class="text-sm font-semibold text-white">{{ item.title }}</p>
                   <p class="mt-2 text-sm text-slate-400">{{ item.time }}</p>
                 </div>
               </div>
             </div>
           </article>
+
+          <article class="surface-card p-6 sm:p-8">
+            <h2 class="text-2xl font-semibold text-white">关键信息</h2>
+            <div class="mt-6 grid gap-4 sm:grid-cols-2">
+              <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">需求</p>
+                <p class="mt-2 text-sm font-medium text-white">{{ order.description_raw || '未补充' }}</p>
+              </div>
+              <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">备注</p>
+                <p class="mt-2 text-sm font-medium text-white">{{ order.notes || '无' }}</p>
+              </div>
+              <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">用户</p>
+                <p class="mt-2 text-sm font-medium text-white">{{ order.user?.username || '未公开' }}</p>
+              </div>
+              <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">代练</p>
+                <p class="mt-2 text-sm font-medium text-white">{{ order.booster?.username || '待接单' }}</p>
+              </div>
+            </div>
+          </article>
         </section>
 
-        <aside class="space-y-6">
-          <article class="surface-card p-6 sm:p-8">
-            <h2 class="text-2xl font-semibold text-white">参与角色</h2>
-            <div class="mt-6 space-y-4">
-              <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <p class="text-sm font-medium text-primary-100">下单用户</p>
-                <p class="mt-2 text-lg font-semibold text-white">{{ order.user?.username || '未公开' }}</p>
-                <p class="mt-2 text-sm text-slate-400">{{ order.user?.email || '暂无邮箱信息' }}</p>
-              </div>
-              <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <p class="text-sm font-medium text-primary-100">当前代练师</p>
-                <p class="mt-2 text-lg font-semibold text-white">{{ order.booster?.username || '尚未接单' }}</p>
-                <p class="mt-2 text-sm text-slate-400">{{ order.booster?.email || '接单后显示代练师信息' }}</p>
-              </div>
-            </div>
-          </article>
+        <aside class="surface-card p-6 sm:p-8">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="text-2xl font-semibold text-white">操作</h2>
+            <span class="text-sm text-slate-400">{{ statusMeta.label }}</span>
+          </div>
 
-          <article class="surface-card p-6 sm:p-8">
-            <h2 class="text-2xl font-semibold text-white">可执行操作</h2>
-            <p class="mt-3 text-sm leading-7 text-slate-400">
-              {{ actionHint }}
-            </p>
-
-            <div class="mt-6 flex flex-col gap-3">
-              <button
-                v-if="isBooster && order.status === 'PENDING' && !isOwner"
-                class="btn-primary py-3"
-                :disabled="actionLoading"
-                @click="handleAccept"
-              >
-                立即接单
-              </button>
-              <button
-                v-if="isAssignedBooster && order.status === 'LOCKED'"
-                class="btn-success py-3"
-                :disabled="actionLoading"
-                @click="handleComplete"
-              >
-                标记订单完成
-              </button>
-              <button
-                v-if="isOwner && order.status === 'PENDING'"
-                class="btn-danger py-3"
-                :disabled="actionLoading"
-                @click="handleCancel"
-              >
-                取消当前订单
-              </button>
-              <button class="btn-secondary py-3" @click="router.push('/orders')">
-                返回订单大厅
-              </button>
-            </div>
-          </article>
+          <div class="mt-6 flex flex-col gap-3">
+            <button
+              v-if="isBooster && order.status === 'PENDING' && !isOwner"
+              class="btn-primary py-3"
+              :disabled="actionLoading"
+              @click="handleAccept"
+            >
+              接单
+            </button>
+            <button
+              v-if="isAssignedBooster && order.status === 'LOCKED'"
+              class="btn-success py-3"
+              :disabled="actionLoading"
+              @click="handleComplete"
+            >
+              完成
+            </button>
+            <button
+              v-if="isOwner && order.status === 'PENDING'"
+              class="btn-danger py-3"
+              :disabled="actionLoading"
+              @click="handleCancel"
+            >
+              取消
+            </button>
+            <button
+              v-if="order.payment_status === 'UNPAID' && order.user_id === currentUser?.id"
+              type="button"
+              class="btn-primary py-3"
+              :disabled="actionLoading"
+              @click="handlePay"
+            >
+              确认支付
+            </button>
+            <button
+              v-if="order.payment_status === 'PAID' && isAdmin && ['CANCELLED', 'DISPUTED'].includes(order.status)"
+              type="button"
+              class="btn-secondary py-3"
+              :disabled="actionLoading"
+              @click="handleRefund"
+            >
+              退款
+            </button>
+            <button
+              v-if="canContactOrderOwner"
+              class="btn-secondary py-3"
+              :disabled="chatLoading"
+              @click="handleStartConversation"
+            >
+              {{ chatLoading ? '打开中...' : '联系用户' }}
+            </button>
+            <button class="btn-secondary py-3" @click="router.push({ name: 'orders' })">返回列表</button>
+          </div>
         </aside>
       </div>
-    </div>
+
+      <section v-if="order.status === 'COMPLETED'" class="surface-card space-y-4 p-6 sm:p-8">
+        <h3 class="section-title !text-2xl">评价</h3>
+
+        <div v-for="review in reviews" :key="review.id" class="stat-card">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm text-slate-400">{{ review.reviewer?.username }}</span>
+            <span class="text-yellow-400">{{ '★'.repeat(review.rating) }}{{ '☆'.repeat(5 - review.rating) }}</span>
+          </div>
+          <p v-if="review.content" class="mt-2 text-sm text-slate-300">{{ review.content }}</p>
+          <button
+            v-if="review.reviewer_id === currentUser?.id"
+            type="button"
+            class="btn-ghost mt-2 !px-3 !py-1 !text-xs"
+            @click="startEditReview(review)"
+          >
+            修改
+          </button>
+        </div>
+
+        <div v-if="(canReview && !hasReviewed) || editingReview" class="stat-card space-y-3">
+          <p class="text-xs uppercase tracking-[0.24em] text-slate-500">
+            {{ editingReview ? '修改评价' : '写评价' }}
+          </p>
+          <div class="flex gap-1">
+            <button
+              v-for="star in 5"
+              :key="star"
+              type="button"
+              class="text-2xl"
+              :class="star <= reviewForm.rating ? 'text-yellow-400' : 'text-slate-600'"
+              @click="reviewForm.rating = star"
+            >
+              ★
+            </button>
+          </div>
+          <textarea
+            v-model="reviewForm.content"
+            class="home-search-input !min-h-[80px]"
+            placeholder="写下你的评价..."
+          ></textarea>
+          <div class="flex gap-2">
+            <button type="button" class="btn-primary !px-4 !py-2" @click="submitReview">
+              {{ editingReview ? '保存修改' : '提交评价' }}
+            </button>
+            <button v-if="editingReview" type="button" class="btn-ghost !px-4 !py-2" @click="editingReview = false">
+              取消
+            </button>
+          </div>
+        </div>
+      </section>
+    </template>
 
     <section v-else class="empty-panel">
-      <h2 class="text-2xl font-semibold text-white">订单不存在或暂时无法访问</h2>
-      <p class="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-400">
-        可能是订单已被删除、权限不足，或者页面刷新时请求尚未成功。你可以先返回订单列表重新进入。
-      </p>
-      <button class="btn-primary mt-8 px-6 py-3" @click="router.push('/orders')">
-        返回订单大厅
-      </button>
+      <h2 class="text-2xl font-semibold text-white">订单不存在</h2>
     </section>
   </div>
 </template>
