@@ -90,7 +90,8 @@ const selectedGameBadgeStyle = computed(() => buildAccentStyle(selectedGame.valu
 
 const canGoToDescribe = computed(() => !!selectedGame.value)
 const canPublish = computed(() => {
-  return Boolean(selectedGame.value && description.value.trim() && Number(formData.value.price) > 0)
+  const hasRequirements = Boolean(description.value.trim() || formData.value.ai_tags)
+  return Boolean(selectedGame.value && hasRequirements && Number(formData.value.price) > 0)
 })
 
 const publishButtonLabel = computed(() => {
@@ -213,7 +214,7 @@ function skipAIAndConfirm() {
 
 async function publishOrder() {
   if (!canPublish.value) {
-    errorMessage.value = '还差一步 — 游戏、需求描述和预算都填一下。'
+    errorMessage.value = '还差一步 — 游戏和预算都要填，需求走一下 AI 或手动填写段位。'
     return
   }
 
