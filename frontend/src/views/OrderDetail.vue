@@ -435,7 +435,7 @@ onMounted(async () => {
               :disabled="chatLoading"
               @click="handleStartConversation"
             >
-              {{ chatLoading ? '打开中...' : '联系老板' }}
+              {{ chatLoading ? '打开中...' : (isBoostOrder ? '联系老板' : '联系搭子') }}
             </button>
             <button class="btn-secondary py-3" @click="router.push({ name: 'orders' })">返回列表</button>
           </div>
