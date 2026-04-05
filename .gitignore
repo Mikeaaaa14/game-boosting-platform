@@ -1,0 +1,17 @@
+# Git worktrees
+.worktrees/
+
+# LaTeX build artifacts in the repository root
+/build/
+/*.aux
+/*.fdb_latexmk
+/*.fls
+/*.lof
+/*.log
+/*.lot
+/*.nav
+/*.out
+/*.snm
+/*.synctex.gz
+/*.toc
+/*.xdv
