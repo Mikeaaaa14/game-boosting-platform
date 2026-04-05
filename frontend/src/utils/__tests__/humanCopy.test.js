@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   getTimeGreeting,
   getServiceTypeLabel,
@@ -8,31 +8,20 @@ import {
 } from '../humanCopy.js'
 
 describe('getTimeGreeting', () => {
-  function mockHour(hour) {
-    vi.setSystemTime(new Date(2026, 0, 1, hour, 0, 0))
-  }
-
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
-
   it('早上 6–10 点返回早上问候', () => {
-    mockHour(8)
-    expect(getTimeGreeting()).toBe('早上好，今天先冲一把？')
+    expect(getTimeGreeting(8)).toBe('早上好，今天先冲一把？')
   })
 
   it('下午 11–17 点返回下午问候', () => {
-    mockHour(14)
-    expect(getTimeGreeting()).toBe('下午了，找个代练上分？')
+    expect(getTimeGreeting(14)).toBe('下午了，找个代练上分？')
   })
 
   it('晚上 18–23 点返回晚上问候', () => {
-    mockHour(20)
-    expect(getTimeGreeting()).toBe('今晚要上分还是陪玩？')
+    expect(getTimeGreeting(20)).toBe('今晚要上分还是陪玩？')
   })
 
   it('凌晨 0–5 点返回凌晨问候', () => {
-    mockHour(2)
-    expect(getTimeGreeting()).toBe('还没睡？来一把放松一下')
+    expect(getTimeGreeting(2)).toBe('还没睡？来一把放松一下')
   })
 })
 
@@ -127,5 +116,27 @@ describe('getOrderStatusCopy', () => {
   it('CANCELLED 不区分类型', () => {
     const { label } = getOrderStatusCopy('CANCELLED', '代练')
     expect(label).toBe('订单已取消')
+  })
+
+  it('LOCKED + 教学（归属陪玩语境）', () => {
+    const { label } = getOrderStatusCopy('LOCKED', '教学')
+    expect(label).toBe('陪玩进行中')
+  })
+
+  it('DISPUTED 状态', () => {
+    const { label, subtitle } = getOrderStatusCopy('DISPUTED', '代练')
+    expect(label).toBe('订单争议中')
+    expect(subtitle).toBe('平台正在介入处理')
+  })
+
+  it('COMPLETED 副标题', () => {
+    const { subtitle } = getOrderStatusCopy('COMPLETED', '代练')
+    expect(subtitle).toBe('记得说说这次体验')
+  })
+
+  it('未知状态返回原始值', () => {
+    const { label, subtitle } = getOrderStatusCopy('UNKNOWN_STATUS', '代练')
+    expect(label).toBe('UNKNOWN_STATUS')
+    expect(subtitle).toBe('')
   })
 })
