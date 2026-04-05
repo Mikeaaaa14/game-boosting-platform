@@ -192,6 +192,7 @@
 
   .btn-primary {
     @apply btn text-white;
+    border: 1px solid transparent;
     background: linear-gradient(135deg, #ff4655 0%, #d63846 100%);
     box-shadow: 0 14px 30px rgba(255, 70, 85, 0.22);
   }
@@ -597,7 +598,7 @@
   }
 
   .home-actions {
-    @apply flex flex-wrap gap-3;
+    @apply flex flex-wrap items-center gap-3;
   }
 
   .home-category-row {

@@ -42,7 +42,7 @@ const canContactOrderOwner = computed(() => {
   if (!order.value?.user_id || isOwner.value) {
     return false
   }
-  return isBooster.value || isAdmin.value
+  return isAssignedBooster.value || isAdmin.value
 })
 const statusMeta = computed(() => getOrderStatusMeta(order.value?.status))
 const humanStatusLabel = computed(() => getHumanStatusLabel(order.value?.status, order.value?.service_type))
@@ -435,7 +435,7 @@ onMounted(async () => {
               :disabled="chatLoading"
               @click="handleStartConversation"
             >
-              {{ chatLoading ? '打开中...' : (isBoostOrder ? '联系老板' : '联系搭子') }}
+              {{ chatLoading ? '打开中...' : '聊一聊' }}
             </button>
             <button class="btn-secondary py-3" @click="router.push({ name: 'orders' })">返回列表</button>
           </div>
