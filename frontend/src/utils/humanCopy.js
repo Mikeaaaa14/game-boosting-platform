@@ -43,7 +43,7 @@ export function getPublishButtonLabel(serviceType) {
 const ORDER_STATUS_COPY = {
   PENDING: {
     boost:   { label: '等待代练接单', subtitle: '需求已发出，代练们正在看' },
-    default: { label: '等待陪玩接单', subtitle: '需求已发出，代练们正在看' },
+    default: { label: '等待陪玩接单', subtitle: '需求已发出，陪玩们正在看' },
   },
   LOCKED: {
     boost:   { label: '代练上号中',   subtitle: '代练正在使用你的账号上分' },

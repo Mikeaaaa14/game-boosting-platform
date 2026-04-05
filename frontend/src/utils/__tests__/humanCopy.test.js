@@ -87,8 +87,9 @@ describe('getOrderStatusCopy', () => {
   })
 
   it('PENDING + 陪玩', () => {
-    const { label } = getOrderStatusCopy('PENDING', '陪玩')
+    const { label, subtitle } = getOrderStatusCopy('PENDING', '陪玩')
     expect(label).toBe('等待陪玩接单')
+    expect(subtitle).toBe('需求已发出，陪玩们正在看')
   })
 
   it('LOCKED + 代练', () => {
