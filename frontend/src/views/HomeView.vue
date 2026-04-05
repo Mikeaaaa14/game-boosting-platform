@@ -1,402 +1,842 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { GAME_IMAGES, PAGE_BACKGROUNDS, onImgError } from '@/data/gameImages.js'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
-const authStore = useAuthStore()
-const isAuthenticated = computed(() => authStore.isAuthenticated)
-const isBooster = computed(() => authStore.isBooster)
-const serviceRail = ref(null)
-const activeGameKey = ref('wzry')
+import HomeHeroCanvas from '@/components/home/HomeHeroCanvas.vue'
+import { getGameHeroPool, PAGE_BACKGROUNDS } from '@/data/gameImages'
+import { useGamesStore } from '@/stores/games'
+import { useServicesStore } from '@/stores/services'
+import { formatPrice } from '@/utils/display'
+import {
+  buildGameSurfaceStyle,
+  getGamePlatformLabel,
+  getGameServiceTypes,
+  resolveGameVisual,
+} from '@/utils/gameCatalog'
+import { getTimeGreeting } from '@/utils/humanCopy'
 
-const primaryAction = computed(() => {
-  if (!isAuthenticated.value) {
-    return { to: '/register', label: '立即注册' }
-  }
+const router = useRouter()
+const gamesStore = useGamesStore()
+const servicesStore = useServicesStore()
 
-  return {
-    to: isBooster.value ? '/orders' : '/orders/create',
-    label: isBooster.value ? '查看可接订单' : '发布代练需求',
-  }
+const copy = {
+  fallbackCategory: '\u9009\u62e9\u6218\u573a',
+  fallbackHeroTitle: '\u8fdb\u5165\u4f60\u7684\u4e0b\u4e00\u573a\u6e38\u620f',
+  heroSubtitleDefault: '\u70ed\u95e8\u670d\u52a1\u4e13\u533a \uff5c \u4ee3\u7ec3 \u00b7 \u966a\u73a9 \u00b7 \u6559\u5b66',
+  enterPrefix: '\u8fdb\u5165 ',
+  modeButton: '我要…',
+  detailLabel: '\u6e38\u620f\u8be6\u60c5',
+  platform: '\u5e73\u53f0',
+  modes: '\u6a21\u5f0f',
+  services: '\u53ef\u7528\u670d\u52a1',
+  noServiceShort: '\u6682\u65e0\u670d\u52a1',
+  searchButton: '搜一下',
+  searchPrefix: '在 ',
+  searchSuffix: ' 里搜游戏或服务',
+  chooseMode: '\u9009\u62e9\u6a21\u5f0f',
+  modeCopy: '\u9009\u62e9\u4f60\u9700\u8981\u7684\u670d\u52a1\u7c7b\u578b\uff0c\u76f4\u63a5\u8fdb\u5165\u5bf9\u5e94\u4e13\u533a\u3002',
+  boostLabel: '帮我上分',
+  playLabel: '一起玩',
+  coachLabel: '带我学',
+  openModePrefix: '去找',
+  currentFocus: '\u5f53\u524d\u7126\u70b9',
+  focusCopy: '\u67e5\u770b\u8be5\u6e38\u620f\u7684\u6240\u6709\u53ef\u7528\u670d\u52a1\uff0c\u6309\u9700\u7b5b\u9009\u3002',
+  visibleServices: '\u53ef\u89c1\u670d\u52a1',
+  noServiceComing: '\u8be5\u6e38\u620f\u670d\u52a1\u5373\u5c06\u4e0a\u7ebf\uff0c\u656c\u8bf7\u671f\u5f85\u3002',
+  noSampleTitle: '\u8be5\u6e38\u620f\u6682\u65e0\u5728\u7ebf\u670d\u52a1',
+  noSampleCopy: '\u4f60\u53ef\u4ee5\u8fdb\u5165\u4e13\u533a\u67e5\u770b\u8be6\u60c5\uff0c\u6216\u5207\u6362\u5176\u4ed6\u6e38\u620f\u3002',
+  serviceFallback: '\u8fd9\u6761\u670d\u52a1\u53ef\u4ee5\u76f4\u63a5\u8fdb\u5165\uff0c\u4e0d\u9700\u8981\u5148\u7ecf\u8fc7\u72ec\u7acb\u76ee\u5f55\u9875\u3002',
+  dealsPrefix: '\u6210\u4ea4 ',
+  cardServiceSuffix: ' \u9879\u670d\u52a1',
+  currentGame: '\u5f53\u524d\u6e38\u620f',
+  carouselPrev: '\u4e0a\u4e00\u7ec4',
+  carouselNext: '\u4e0b\u4e00\u7ec4',
+}
+
+const heroSubtitleByName = {
+  ['王者荣耀']: '国民级 5v5 MOBA ｜ 代练 · 陪玩 · 教学',
+  ['英雄联盟']: '经典 5v5 MOBA ｜ 代练 · 陪玩 · 教学',
+  ['英雄联盟手游']: '竞技 MOBA ｜ 代练 · 陪玩 · 教学',
+  ['DOTA2']: '经典 MOBA ｜ 代练 · 陪玩 · 教学',
+  ['曙光英雄']: '节奏对抗 MOBA ｜ 代练 · 陪玩 · 教学',
+  ['决战！平安京']: '和风 MOBA ｜ 代练 · 陪玩 · 教学',
+  ['原神']: '开放世界冒险 RPG ｜ 代肝 · 陪玩 · 教学',
+  ['无畏契约']: '战术竞技 FPS ｜ 代练 · 陪玩 · 教学',
+  ['三角洲行动']: '拟真军事 FPS ｜ 代练 · 陪玩 · 教学',
+  ['金铲铲之战']: '自走棋策略 ｜ 代练 · 陪玩 · 教学',
+}
+
+const activeCategory = ref('')
+const activeGameId = ref(null)
+const activeModeKey = ref('boost')
+const quickQuery = ref('')
+const carouselRef = ref(null)
+const progressTrackRef = ref(null)
+const isDragging = ref(false)
+const dragMoved = ref(false)
+const carouselProgress = ref({
+  thumbWidth: 26,
+  thumbLeft: 0,
 })
 
-const secondaryAction = computed(() => {
-  if (!isAuthenticated.value) {
-    return { to: '/login', label: '登录已有账号' }
-  }
+const greeting = computed(() => getTimeGreeting())
+const slideshowHero = ref(null)
+let slideshowTimer = null
 
-  return { to: '/profile', label: '查看个人中心' }
+let dragStartX = 0
+let dragStartScrollLeft = 0
+let hasSeededSelection = false
+let isSeekingProgress = false
+let pointerStartGameId = null
+
+const categories = computed(() => gamesStore.categories.filter((item) => item.count > 0))
+
+const activeCategoryRecord = computed(() => {
+  return categories.value.find((item) => item.value === activeCategory.value) || categories.value[0] || null
 })
 
-const heroStats = [
-  { label: '热门游戏', value: '6+', hint: '王者、LOL、和平精英、原神等常见需求都能发布' },
-  { label: '服务类型', value: '多场景', hint: '冲段、代肝、赛季冲刺、陪练与双排都可描述清楚' },
-  { label: '订单状态', value: '可追踪', hint: '待接单、进行中、完成等节点都能随时查看' },
-]
+const heroGames = computed(() => {
+  const scoped = activeCategoryRecord.value?.games || []
+  if (scoped.length) {
+    return scoped.slice(0, 12)
+  }
 
-const gameShowcases = [
-  {
-    key: 'wzry',
-    short: '王',
-    name: '王者荣耀',
-    category: 'MOBA 手游',
-    headline: '赛季冲星、卡段突破、巅峰赛补分',
-    intro: '适合赛季末冲王者、晋级赛卡段、巅峰积分补分与指定分路上分。可补充微信区 / QQ 区、常用英雄和可打时段。',
-    highlights: ['分路和英雄池可备注', '支持赛季末冲分和保星需求', '适合想快速突破瓶颈的玩家'],
-    scenes: [
-      {
-        title: '赛季末冲王者',
-        route: '星耀三 → 王者',
-        copy: '适合卡在晋级赛、想在赛季结算前稳定补星的玩家。',
-      },
-      {
-        title: '巅峰赛补分',
-        route: '巅峰 1500 → 1800',
-        copy: '适合想提高巅峰积分、补足常用英雄战力的玩家。',
-      },
-      {
-        title: '指定分路上分',
-        route: '打野 / 发育路 / 中路',
-        copy: '可写清常用英雄和补位偏好，减少来回确认。',
-      },
-    ],
-  },
-  {
-    key: 'lol',
-    short: 'LOL',
-    name: '英雄联盟',
-    category: '端游排位',
-    headline: '单双排冲段、定位赛补分、分路专精',
-    intro: '适合艾欧尼亚等大区的赛季补分、单双排冲段和指定分路需求。可补充英雄池、位置偏好与在线时段。',
-    highlights: ['支持大区、单双排和位置偏好', '适合定位赛、晋级赛和赛季冲刺', '对中野联动、上路单带等打法偏好更友好'],
-    scenes: [
-      {
-        title: '单双排冲钻石',
-        route: '铂金二 → 钻石',
-        copy: '适合想在赛季中后段补分、快速提升隐藏分的玩家。',
-      },
-      {
-        title: '定位赛开局优化',
-        route: '新赛季定位',
-        copy: '适合刚开赛季，希望前期把定位结果打得更稳的玩家。',
-      },
-      {
-        title: '分路专精上分',
-        route: '中单 / 打野 / ADC',
-        copy: '可备注常用英雄和禁用思路，降低沟通成本。',
-      },
-    ],
-  },
-  {
-    key: 'hpjy',
-    short: '和',
-    name: '和平精英',
-    category: '战术竞技',
-    headline: '王牌冲刺、双排语音、赛季稳定上分',
-    intro: '适合想稳定冲王牌、提高段位分、偏好双排语音沟通的玩家。可写清楚单双排、四排与时间安排。',
-    highlights: ['适合赛季冲王牌和稳分需求', '可备注双排语音或固定时段', '对团队协作和沟通型需求更友好'],
-    scenes: [
-      {
-        title: '赛季冲王牌',
-        route: '皇冠五 → 王牌',
-        copy: '适合赛季时间有限、想尽快完成目标段位的玩家。',
-      },
-      {
-        title: '双排语音配合',
-        route: '双排 / 语音指挥',
-        copy: '适合希望边打边沟通、提高配合效率的用户。',
-      },
-      {
-        title: '稳分保段',
-        route: '防掉段 / 防掉星',
-        copy: '适合已经接近目标段位，只想稳定保住当前成绩的玩家。',
-      },
-    ],
-  },
-  {
-    key: 'ys',
-    short: '原',
-    name: '原神',
-    category: '开放世界',
-    headline: '日常代肝、活动推进、阶段目标整理',
-    intro: '适合每日委托、体力消耗、活动奖励、深境螺旋和材料收集等代肝需求。可写清服务器、练度和目标任务。',
-    highlights: ['适合长期日常和活动节奏整理', '可按周目标或活动节点发单', '对材料、圣遗物和副本目标支持更清楚'],
-    scenes: [
-      {
-        title: '每日体力与委托',
-        route: '日常代肝',
-        copy: '适合工作忙、上线时间少，但又不想落下日常资源的玩家。',
-      },
-      {
-        title: '限时活动推进',
-        route: '活动奖励 / 商店兑换',
-        copy: '适合想拿满活动奖励、却来不及完成阶段任务的玩家。',
-      },
-      {
-        title: '阶段目标整理',
-        route: '材料 / 圣遗物 / 深境螺旋',
-        copy: '可提前写清角色培养方向，减少重复沟通。',
-      },
-    ],
-  },
-  {
-    key: 'yjwj',
-    short: '劫',
-    name: '永劫无间',
-    category: '竞技协作',
-    headline: '排位冲分、三排配合、英雄熟练度提升',
-    intro: '适合单排冲分、三排配合和指定英雄练习。可补充常用武器、队伍模式和希望提升的具体环节。',
-    highlights: ['适合排位冲分和三排协作', '可备注常用英雄与武器体系', '对想提升配合质量的玩家更实用'],
-    scenes: [
-      {
-        title: '赛季冲分',
-        route: '当前段位 → 目标段位',
-        copy: '适合赛季末想补分、提升排位结算成绩的玩家。',
-      },
-      {
-        title: '三排协作',
-        route: '组排配合',
-        copy: '适合希望在配合、集火和资源分配上更顺畅的用户。',
-      },
-      {
-        title: '英雄 / 武器专项',
-        route: '角色熟练度提升',
-        copy: '可说明常用英雄与武器，服务目标更聚焦。',
-      },
-    ],
-  },
-]
+  return gamesStore.catalogGames.slice(0, 12)
+})
 
 const activeGame = computed(() => {
-  return gameShowcases.find((game) => game.key === activeGameKey.value) || gameShowcases[0]
+  if (!heroGames.value.length) {
+    return gamesStore.randomGame || null
+  }
+
+  return heroGames.value.find((game) => game.id === activeGameId.value) || heroGames.value[0]
 })
 
-const servicePromises = [
-  {
-    title: '热门段位冲刺',
-    tag: '上分',
-    copy: '适合王者、LOL、永劫无间等有明确段位目标的用户，把当前段位、目标段位和预算一次写清楚。',
-  },
-  {
-    title: '日常与活动代肝',
-    tag: '代肝',
-    copy: '适合原神等周期任务较多的游戏，按每日、每周或活动节点整理需求会更高效。',
-  },
-  {
-    title: '双排与陪练沟通',
-    tag: '陪练',
-    copy: '适合和平精英等强调实时配合的游戏，可以补充语音、时段和沟通方式偏好。',
-  },
-]
+const heroVisual = computed(() => {
+  const base = resolveGameVisual(activeGame.value)
+  if (slideshowHero.value) {
+    return { ...base, hero: slideshowHero.value }
+  }
+  return base
+})
+const heroAccent = computed(() => heroVisual.value.color || '#ff4655')
+const serviceTypes = computed(() => getGameServiceTypes(activeGame.value))
 
-const journeySteps = [
-  {
-    title: '选好游戏与目标',
-    copy: '先明确你是要冲段、代肝、双排还是赛季冲刺，目标越清楚，后续越省事。',
-  },
-  {
-    title: '写清预算与偏好',
-    copy: '把区服、常用位置、英雄池、在线时段和沟通方式一起写出来，减少反复确认。',
-  },
-  {
-    title: '等待接单与沟通',
-    copy: '订单发布后可以查看状态变化，决定是否继续补充信息或确认合作。',
-  },
-  {
-    title: '跟进进度与验收',
-    copy: '完成、争议或其他关键节点都会显示在订单里，方便你随时回看。',
-  },
-]
+const serviceCountByGame = computed(() => {
+  return servicesStore.services.reduce((result, service) => {
+    const gameId = Number(service.game_id)
+    result[gameId] = (result[gameId] || 0) + 1
+    return result
+  }, {})
+})
 
-function selectGame(gameKey) {
-  activeGameKey.value = gameKey
-  serviceRail.value?.scrollTo({ left: 0, behavior: 'smooth' })
+const selectedGameServices = computed(() => {
+  if (!activeGame.value) {
+    return []
+  }
+
+  return servicesStore.services
+    .filter((service) => service.game_id === activeGame.value.id)
+    .slice(0, 3)
+})
+
+const heroSubtitle = computed(() => {
+  if (!activeGame.value) {
+    return copy.heroSubtitleDefault
+  }
+
+  return heroSubtitleByName[activeGame.value.name] || `${getGamePlatformLabel(activeGame.value.platform)} \uff5c \u4ee3\u7ec3 \u00b7 \u966a\u73a9 \u00b7 \u6559\u5b66`
+})
+
+const heroStats = computed(() => [
+  {
+    label: copy.platform,
+    value: getGamePlatformLabel(activeGame.value?.platform),
+  },
+  {
+    label: copy.modes,
+    value: serviceTypes.value.length ? `${serviceTypes.value.length} \u79cd` : '--',
+  },
+  {
+    label: copy.services,
+    value: (serviceCountByGame.value[activeGame.value?.id] || 0) > 0
+      ? `${serviceCountByGame.value[activeGame.value?.id]} \u9879`
+      : copy.noServiceShort,
+  },
+])
+
+const focusServiceCount = computed(() => serviceCountByGame.value[activeGame.value?.id] || 0)
+
+const modeCards = computed(() => [
+  {
+    key: 'boost',
+    label: copy.boostLabel,
+    serviceType: resolveModeType(['\u4ee3', '\u4e0a\u5206'], ['boost', 'rank']),
+  },
+  {
+    key: 'play',
+    label: copy.playLabel,
+    serviceType: resolveModeType(['\u966a'], ['duo', 'party', 'play']),
+  },
+  {
+    key: 'coach',
+    label: copy.coachLabel,
+    serviceType: resolveModeType(['\u6559'], ['coach', 'review', 'guide']),
+  },
+])
+
+const activeModeCard = computed(() => {
+  return modeCards.value.find((item) => item.key === activeModeKey.value) || modeCards.value[0]
+})
+
+const heroThemeStyle = computed(() => ({
+  '--brand-rgb': toRgbTriplet(heroAccent.value),
+}))
+
+function toRgbTriplet(hex) {
+  const safe = String(hex || '').replace('#', '').trim()
+  if (safe.length !== 6) {
+    return '255, 70, 85'
+  }
+
+  const red = Number.parseInt(safe.slice(0, 2), 16)
+  const green = Number.parseInt(safe.slice(2, 4), 16)
+  const blue = Number.parseInt(safe.slice(4, 6), 16)
+  return `${red}, ${green}, ${blue}`
 }
 
-function scrollScenes(direction) {
-  serviceRail.value?.scrollBy({ left: direction * 320, behavior: 'smooth' })
+function resolveModeType(chineseKeywords = [], englishKeywords = []) {
+  const types = serviceTypes.value
+  if (!types.length) {
+    return ''
+  }
+
+  const lowerKeywords = englishKeywords.map((item) => item.toLowerCase())
+
+  const matched = types.find((type) => {
+    const content = String(type || '')
+    const lower = content.toLowerCase()
+    return chineseKeywords.some((keyword) => content.includes(keyword))
+      || lowerKeywords.some((keyword) => lower.includes(keyword))
+  })
+
+  return matched || types[0] || ''
 }
+
+function seedRandomSelection() {
+  const availableCategories = categories.value.filter((item) => item.games?.length)
+  if (!availableCategories.length) {
+    return
+  }
+
+  const category = availableCategories[Math.floor(Math.random() * availableCategories.length)]
+  const scopedGames = category.games.slice(0, 12)
+  const randomGame = scopedGames[Math.floor(Math.random() * scopedGames.length)] || scopedGames[0]
+
+  activeCategory.value = category.value
+  activeGameId.value = randomGame?.id || null
+}
+
+function ensureSelection() {
+  if (!categories.value.length) {
+    activeCategory.value = ''
+    activeGameId.value = null
+    return
+  }
+
+  if (!categories.value.some((item) => item.value === activeCategory.value)) {
+    activeCategory.value = categories.value[0].value
+  }
+
+  if (!heroGames.value.some((game) => game.id === activeGameId.value)) {
+    activeGameId.value = heroGames.value[0]?.id || null
+  }
+}
+
+function selectCategory(category) {
+  if (category === activeCategory.value) {
+    scrollToGame(activeGameId.value, 'smooth')
+    return
+  }
+
+  activeCategory.value = category
+  activeGameId.value = categories.value.find((item) => item.value === category)?.games?.[0]?.id || null
+  nextTick(() => {
+    scrollToGame(activeGameId.value, 'smooth')
+    updateCarouselMetrics()
+  })
+}
+
+function setActiveGame(gameId, options = {}) {
+  if (!gameId) {
+    return
+  }
+
+  activeGameId.value = gameId
+  if (options.scroll !== false) {
+    nextTick(() => {
+      scrollToGame(gameId, options.behavior || 'smooth')
+    })
+  }
+}
+
+function setActiveMode(modeKey) {
+  activeModeKey.value = modeKey
+}
+
+function handleGameCardClick(gameId) {
+  if (dragMoved.value) {
+    dragMoved.value = false
+    return
+  }
+
+  setActiveGame(gameId)
+}
+
+function handleGameCardKeydown(event, gameId) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    setActiveGame(gameId)
+  }
+}
+
+function openGameZone() {
+  if (!activeGame.value) {
+    return
+  }
+
+  router.push({ name: 'game-zone', params: { id: activeGame.value.id } })
+}
+
+function openServiceMode(serviceType) {
+  if (!activeGame.value) {
+    return
+  }
+
+  router.push({
+    name: 'game-zone',
+    params: { id: activeGame.value.id },
+    query: {
+      tab: 'services',
+      service_type: serviceType || undefined,
+    },
+  })
+}
+
+function openActiveMode() {
+  openServiceMode(activeModeCard.value?.serviceType)
+}
+
+function openService(serviceId) {
+  router.push({ name: 'service-detail', params: { id: serviceId } })
+}
+
+function scrollToModes() {
+  document.querySelector('#match-floor')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function submitQuickSearch() {
+  router.push({
+    name: 'search',
+    query: {
+      q: quickQuery.value.trim() || undefined,
+      type: 'all',
+      game_id: activeGame.value?.id || undefined,
+    },
+  })
+}
+
+function scrollToGame(gameId, behavior = 'smooth') {
+  const rail = carouselRef.value
+  if (!rail || !gameId) {
+    return
+  }
+
+  const card = rail.querySelector(`[data-game-id="${gameId}"]`)
+  if (!card) {
+    return
+  }
+
+  const left = card.offsetLeft - (rail.clientWidth - card.clientWidth) / 2
+  rail.scrollTo({
+    left: Math.max(0, left),
+    behavior,
+  })
+}
+
+function scrollCarousel(direction) {
+  if (!heroGames.value.length || !activeGame.value) {
+    return
+  }
+
+  const currentIndex = heroGames.value.findIndex((game) => game.id === activeGame.value.id)
+  const fallbackIndex = currentIndex === -1 ? 0 : currentIndex
+  const nextIndex = Math.min(Math.max(fallbackIndex + direction, 0), heroGames.value.length - 1)
+  const nextGame = heroGames.value[nextIndex]
+
+  if (nextGame) {
+    setActiveGame(nextGame.id)
+  }
+}
+
+function handleCarouselPointerDown(event) {
+  if (event.pointerType === 'mouse' && event.button !== 0) {
+    return
+  }
+
+  const rail = carouselRef.value
+  if (!rail) {
+    return
+  }
+
+  isDragging.value = true
+  dragMoved.value = false
+  dragStartX = event.clientX
+  dragStartScrollLeft = rail.scrollLeft
+  pointerStartGameId = Number(event.target?.closest?.('[data-game-id]')?.getAttribute('data-game-id')) || null
+  rail.setPointerCapture?.(event.pointerId)
+}
+
+function handleCarouselPointerMove(event) {
+  if (!isDragging.value) {
+    return
+  }
+
+  const rail = carouselRef.value
+  if (!rail) {
+    return
+  }
+
+  const delta = event.clientX - dragStartX
+  if (Math.abs(delta) > 6) {
+    dragMoved.value = true
+  }
+
+  rail.scrollLeft = dragStartScrollLeft - delta
+  updateCarouselMetrics()
+}
+
+function handleCarouselPointerEnd(event) {
+  if (!isDragging.value) {
+    return
+  }
+
+  isDragging.value = false
+  carouselRef.value?.releasePointerCapture?.(event.pointerId)
+  if (!dragMoved.value && pointerStartGameId) {
+    setActiveGame(pointerStartGameId)
+  }
+  pointerStartGameId = null
+  window.setTimeout(() => {
+    dragMoved.value = false
+  }, 0)
+}
+
+function updateCarouselMetrics() {
+  const rail = carouselRef.value
+  if (!rail) {
+    return
+  }
+
+  const maxScroll = Math.max(rail.scrollWidth - rail.clientWidth, 0)
+  const thumbWidth = rail.scrollWidth <= rail.clientWidth
+    ? 100
+    : Math.max((rail.clientWidth / rail.scrollWidth) * 100, 14)
+  const thumbTravel = 100 - thumbWidth
+  const ratio = maxScroll === 0 ? 0 : rail.scrollLeft / maxScroll
+
+  carouselProgress.value = {
+    thumbWidth,
+    thumbLeft: thumbTravel * ratio,
+  }
+}
+
+function updateCarouselFromProgress(event) {
+  const rail = carouselRef.value
+  const track = progressTrackRef.value
+  if (!rail || !track) {
+    return
+  }
+
+  const rect = track.getBoundingClientRect()
+  const position = (event.clientX - rect.left) / rect.width
+  const clamped = Math.min(Math.max(position, 0), 1)
+  const maxScroll = Math.max(rail.scrollWidth - rail.clientWidth, 0)
+  rail.scrollLeft = maxScroll * clamped
+  updateCarouselMetrics()
+}
+
+function handleProgressPointerDown(event) {
+  const track = progressTrackRef.value
+  if (!track) {
+    return
+  }
+
+  isSeekingProgress = true
+  track.setPointerCapture?.(event.pointerId)
+  updateCarouselFromProgress(event)
+}
+
+function handleProgressPointerMove(event) {
+  if (!isSeekingProgress) {
+    return
+  }
+
+  updateCarouselFromProgress(event)
+}
+
+function handleProgressPointerEnd(event) {
+  if (!isSeekingProgress) {
+    return
+  }
+
+  isSeekingProgress = false
+  progressTrackRef.value?.releasePointerCapture?.(event.pointerId)
+}
+
+function startSlideshow() {
+  stopSlideshow()
+  const gameName = activeGame.value?.name
+  const pool = gameName ? getGameHeroPool(gameName) : []
+  if (pool.length <= 1) {
+    slideshowHero.value = null
+    return
+  }
+
+  slideshowHero.value = pool[Math.floor(Math.random() * pool.length)]
+
+  slideshowTimer = window.setInterval(() => {
+    const current = slideshowHero.value
+    let next = current
+    while (next === current) {
+      next = pool[Math.floor(Math.random() * pool.length)]
+    }
+    slideshowHero.value = next
+  }, 30000)
+}
+
+function stopSlideshow() {
+  if (slideshowTimer) {
+    window.clearInterval(slideshowTimer)
+    slideshowTimer = null
+  }
+}
+
+watch(categories, async (items) => {
+  if (!items.length) {
+    return
+  }
+
+  if (!hasSeededSelection) {
+    seedRandomSelection()
+    hasSeededSelection = true
+    await nextTick()
+    scrollToGame(activeGameId.value, 'auto')
+    updateCarouselMetrics()
+    return
+  }
+
+  ensureSelection()
+  await nextTick()
+  updateCarouselMetrics()
+}, { immediate: true })
+
+watch(heroGames, async () => {
+  ensureSelection()
+  await nextTick()
+  updateCarouselMetrics()
+})
+
+watch(activeGame, async () => {
+  await nextTick()
+  updateCarouselMetrics()
+  startSlideshow()
+})
+
+onMounted(async () => {
+  await Promise.all([
+    gamesStore.ensureCatalog(),
+    servicesStore.fetchServices({
+      page: 1,
+      page_size: 60,
+      game_id: '',
+      service_type: '',
+      price_min: '',
+      price_max: '',
+    }),
+  ])
+
+  await nextTick()
+  updateCarouselMetrics()
+  window.addEventListener('resize', updateCarouselMetrics)
+  startSlideshow()
+})
+
+onBeforeUnmount(() => {
+  stopSlideshow()
+  window.removeEventListener('resize', updateCarouselMetrics)
+})
 </script>
 
 <template>
-  <div class="page-shell space-y-14">
-    <section class="hero-panel scanline-overlay p-6 sm:p-8 lg:p-10" style="background-image: linear-gradient(135deg, rgba(10,10,15,0.92), rgba(18,18,26,0.88)), url('https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1600&q=80'); background-size: cover; background-position: center;">
-      <div class="absolute inset-y-0 right-0 hidden w-1/2 bg-gradient-to-l from-primary-400/10 via-transparent to-transparent lg:block"></div>
-      <div class="grid gap-8 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
-        <div class="space-y-6">
-          <p class="eyebrow">热门游戏上分 · 赛季冲刺 · 代肝代打 · 陪练协作</p>
-          <div class="space-y-4">
-            <h1 class="display-title max-w-3xl">
-              把上分、冲段、代肝和赛季冲刺，
-              <span class="cyber-gradient neon-text">交给更懂游戏节奏的人</span>
-              去完成。
-            </h1>
-            <p class="section-copy max-w-2xl">
-              王者荣耀、英雄联盟、和平精英、原神等常见需求都能在同一平台发布。先把游戏、目标、预算和时段写清楚，再决定下一步怎么下单，会比零散沟通省心得多。
-            </p>
-          </div>
+  <div class="home-landing">
+    <section class="home-hero" :style="heroThemeStyle">
+      <transition name="hero-fade" mode="out-in">
+        <div
+          :key="heroVisual.hero || activeGame?.id || activeCategory"
+          class="home-hero__media"
+          :style="{ backgroundImage: `url('${heroVisual.hero || PAGE_BACKGROUNDS.hero}')` }"
+        ></div>
+      </transition>
 
-          <div class="flex flex-col gap-3 sm:flex-row">
-            <router-link :to="primaryAction.to" class="btn-primary px-6 py-3">
-              {{ primaryAction.label }}
-            </router-link>
-            <router-link :to="secondaryAction.to" class="btn-secondary px-6 py-3">
-              {{ secondaryAction.label }}
-            </router-link>
-          </div>
+      <HomeHeroCanvas :accent="heroAccent" />
+      <div class="home-hero__veil"></div>
 
-          <div class="grid gap-3 sm:grid-cols-3">
-            <div
-              v-for="item in heroStats"
-              :key="item.label"
-              class="stat-card cyber-corner"
-            >
-              <p class="text-2xl font-semibold text-white">{{ item.value }}</p>
-              <p class="mt-1 text-sm text-slate-200">{{ item.label }}</p>
-              <p class="mt-2 text-xs leading-6 text-slate-400">{{ item.hint }}</p>
-            </div>
-          </div>
-        </div>
+      <div class="home-hero__inner shell-container">
+        <div class="home-hero__copy space-y-6">
+          <p class="home-kicker">{{ activeCategoryRecord?.label || copy.fallbackCategory }}</p>
+          <p class="text-sm font-medium text-primary-200 mb-2 tracking-wide">{{ greeting }}</p>
+          <h1 class="home-headline">{{ activeGame?.name || copy.fallbackHeroTitle }}</h1>
+          <p class="home-summary">{{ heroSubtitle }}</p>
 
-        <div class="surface-card overflow-hidden p-6 sm:p-7">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <p class="text-sm font-medium text-primary-100">按游戏切换</p>
-              <p class="mt-2 text-sm leading-6 text-slate-400">先选你最关心的游戏，再看更贴近该游戏节奏的服务场景。</p>
-            </div>
-            <span class="badge-review">可切换</span>
-          </div>
-
-          <div class="mt-5 flex flex-wrap gap-2">
-            <button
-              v-for="game in gameShowcases"
-              :key="game.key"
-              type="button"
-              class="rounded-full border px-4 py-2 text-sm font-medium transition"
-              :class="game.key === activeGame.key ? 'border-primary-300/50 bg-primary-500/15 text-white shadow-glow' : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:text-white'"
-              @click="selectGame(game.key)"
-            >
-              {{ game.name }}
+          <div class="home-actions">
+            <button type="button" class="btn-primary" @click="openGameZone">
+              {{ copy.enterPrefix }}{{ activeGame?.name || '' }}
+            </button>
+            <button type="button" class="btn-secondary" @click="scrollToModes">
+              {{ copy.modeButton }}
             </button>
           </div>
 
-          <div class="mt-6 rounded-[30px] border border-white/10 bg-white/5 p-5 sm:p-6">
-            <div class="flex items-start gap-4">
-              <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-[24px] bg-gradient-to-br from-primary-300/30 to-accent-300/20 text-2xl font-semibold text-white">
-                {{ activeGame.short }}
-              </div>
-              <div class="space-y-2">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="text-2xl font-semibold text-white">{{ activeGame.name }}</h2>
-                  <span class="tag">{{ activeGame.category }}</span>
-                </div>
-                <p class="text-lg font-medium text-primary-100">{{ activeGame.headline }}</p>
-                <p class="text-sm leading-7 text-slate-300">{{ activeGame.intro }}</p>
-              </div>
-            </div>
+          <div class="home-category-row">
+            <button
+              v-for="category in categories"
+              :key="category.value"
+              type="button"
+              :class="category.value === activeCategory ? 'home-category-pill home-category-pill-active' : 'home-category-pill'"
+              @click="selectCategory(category.value)"
+            >
+              <span>{{ category.label }}</span>
+              <span class="text-xs uppercase tracking-[0.24em] text-slate-500">{{ category.count }}</span>
+            </button>
+          </div>
+        </div>
 
-            <div class="mt-6 grid gap-3 sm:grid-cols-3">
-              <div
-                v-for="item in activeGame.highlights"
-                :key="item"
-                class="rounded-3xl border border-white/10 bg-slate-950/40 p-4 text-sm leading-6 text-slate-300"
+        <aside class="home-hero__panel">
+          <p class="home-panel-label">{{ copy.detailLabel }}</p>
+          <h2 class="home-panel-title">{{ activeGame?.name || copy.detailLabel }}</h2>
+
+          <div class="home-panel-grid">
+            <article
+              v-for="stat in heroStats"
+              :key="stat.label"
+              class="home-panel-stat"
+            >
+              <span>{{ stat.label }}</span>
+              <strong>{{ stat.value }}</strong>
+            </article>
+          </div>
+
+          <form class="home-search-shell" @submit.prevent="submitQuickSearch">
+            <input
+              v-model="quickQuery"
+              type="text"
+              class="home-search-input"
+              :placeholder="`${copy.searchPrefix}${activeGame?.name || ''}${copy.searchSuffix}`"
+            />
+            <button type="submit" class="btn-ghost !px-4 !py-2.5">{{ copy.searchButton }}</button>
+          </form>
+        </aside>
+
+        <div class="home-carousel-shell">
+          <button
+            type="button"
+            class="home-carousel-button home-carousel-button-left"
+            :aria-label="copy.carouselPrev"
+            :title="copy.carouselPrev"
+            @click="scrollCarousel(-1)"
+          >
+            &lsaquo;
+          </button>
+
+          <div class="home-carousel-stack">
+            <div
+              ref="carouselRef"
+              :class="isDragging ? 'home-game-rail is-dragging' : 'home-game-rail'"
+              @pointerdown="handleCarouselPointerDown"
+              @pointermove="handleCarouselPointerMove"
+              @pointerup="handleCarouselPointerEnd"
+              @pointercancel="handleCarouselPointerEnd"
+              @pointerleave="handleCarouselPointerEnd"
+              @scroll="updateCarouselMetrics"
+            >
+              <button
+                v-for="game in heroGames"
+                :key="game.id"
+                :data-game-id="game.id"
+                type="button"
+                :class="game.id === activeGame?.id ? 'home-game-button home-game-button-active' : 'home-game-button'"
+                @click="handleGameCardClick(game.id)"
+                @keydown="handleGameCardKeydown($event, game.id)"
               >
-                {{ item }}
-              </div>
+                <span class="home-game-button__label">{{ game.name }}<span
+                  v-if="serviceCountByGame[game.id] > 0"
+                  class="online-dot ml-2 inline-flex align-middle"
+                  title="有服务可用"
+                ></span></span>
+                <div class="home-game-button__meta-row">
+                  <span class="home-game-button__meta">{{ getGamePlatformLabel(game.platform) }}</span>
+                  <span class="home-game-button__count">{{ serviceCountByGame[game.id] || 0 }}{{ copy.cardServiceSuffix }}</span>
+                </div>
+              </button>
+            </div>
+
+            <div
+              ref="progressTrackRef"
+              class="home-carousel-progress"
+              @pointerdown="handleProgressPointerDown"
+              @pointermove="handleProgressPointerMove"
+              @pointerup="handleProgressPointerEnd"
+              @pointercancel="handleProgressPointerEnd"
+              @pointerleave="handleProgressPointerEnd"
+            >
+              <div
+                class="home-carousel-progress__thumb"
+                :style="{
+                  width: `${carouselProgress.thumbWidth}%`,
+                  transform: `translateX(${carouselProgress.thumbLeft}%)`,
+                }"
+              ></div>
             </div>
           </div>
+
+          <button
+            type="button"
+            class="home-carousel-button home-carousel-button-right"
+            :aria-label="copy.carouselNext"
+            :title="copy.carouselNext"
+            @click="scrollCarousel(1)"
+          >
+            &rsaquo;
+          </button>
         </div>
       </div>
     </section>
 
-    <section class="space-y-6">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p class="eyebrow">服务场景</p>
-          <h2 class="section-title mt-4">切换游戏后，横向浏览更具体的下单方向</h2>
+    <section id="match-floor" class="shell-container py-14 sm:py-16 lg:py-20">
+      <div class="grid gap-10 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
+        <div class="space-y-4">
+          <p class="eyebrow">{{ copy.chooseMode }}</p>
+          <h2 class="section-title !text-4xl sm:!text-5xl">{{ copy.chooseMode }}</h2>
+          <p class="section-copy max-w-xl">{{ copy.modeCopy }}</p>
         </div>
-        <div class="flex items-center gap-3">
-          <p class="max-w-xl text-sm leading-7 text-slate-400">
-            这一排卡片支持横向滑动，你可以快速切换不同游戏对应的常见场景，再决定自己想发布哪类需求。
-          </p>
-          <div class="hidden gap-2 sm:flex">
-            <button class="btn-secondary !px-4 !py-2" @click="scrollScenes(-1)">向左</button>
-            <button class="btn-secondary !px-4 !py-2" @click="scrollScenes(1)">向右</button>
+
+        <div class="home-mode-stage">
+          <div class="home-mode-stage__panel">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.24em] text-slate-500">{{ activeGame?.name || copy.currentGame }}</p>
+                <h3 class="mt-4 text-4xl font-semibold text-white">{{ activeModeCard?.label }}</h3>
+              </div>
+              <span class="tag">{{ getGamePlatformLabel(activeGame?.platform) }}</span>
+            </div>
+
+            <div class="mt-8 flex flex-wrap gap-3">
+              <span
+                v-for="serviceType in serviceTypes.slice(0, 3)"
+                :key="`mode-${serviceType}`"
+                class="tag"
+              >
+                {{ serviceType }}
+              </span>
+            </div>
+
+            <button type="button" class="btn-primary mt-8" @click="openActiveMode">
+              {{ copy.openModePrefix }}{{ activeModeCard?.label }}
+            </button>
+          </div>
+
+          <div class="home-mode-stage__selectors">
+            <button
+              v-for="mode in modeCards"
+              :key="mode.key"
+              type="button"
+              :class="mode.key === activeModeKey ? 'home-mode-selector home-mode-selector-active' : 'home-mode-selector'"
+              @click="setActiveMode(mode.key)"
+            >
+              <span class="home-mode-selector__title">{{ mode.label }}</span>
+            </button>
           </div>
         </div>
       </div>
+    </section>
 
-      <div
-        ref="serviceRail"
-        class="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2"
-      >
-        <article
-          v-for="scene in activeGame.scenes"
-          :key="`${activeGame.key}-${scene.title}`"
-          class="card-hover scanline-overlay min-w-[280px] snap-start sm:min-w-[320px]"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <span class="tag">{{ activeGame.name }}</span>
-            <span class="text-sm font-semibold text-accent-300">{{ scene.route }}</span>
+    <section class="shell-container pb-16 sm:pb-20 lg:pb-24">
+      <div class="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+        <article class="home-spotlight" :style="buildGameSurfaceStyle(activeGame)">
+          <div class="relative z-10 flex h-full flex-col justify-between">
+            <div class="space-y-3">
+              <p class="eyebrow">{{ copy.currentFocus }}</p>
+              <h2 class="display-title !text-[clamp(2.6rem,4vw,4.8rem)]">{{ activeGame?.name || copy.currentFocus }}</h2>
+              <p class="section-copy max-w-xl">{{ copy.focusCopy }}</p>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-3">
+              <article class="stat-card">
+                <p class="text-xs uppercase tracking-[0.24em] text-slate-500">{{ copy.platform }}</p>
+                <p class="mt-3 text-2xl font-semibold text-white">{{ getGamePlatformLabel(activeGame?.platform) }}</p>
+              </article>
+              <article class="stat-card">
+                <p class="text-xs uppercase tracking-[0.24em] text-slate-500">{{ copy.modes }}</p>
+                <p class="mt-3 text-2xl font-semibold text-white">{{ serviceTypes.length || '--' }}</p>
+              </article>
+              <article class="stat-card">
+                <p class="text-xs uppercase tracking-[0.24em] text-slate-500">{{ copy.visibleServices }}</p>
+                <template v-if="focusServiceCount > 0">
+                  <p class="mt-3 text-2xl font-semibold text-white">{{ focusServiceCount }}</p>
+                </template>
+                <template v-else>
+                  <p class="mt-3 text-2xl font-semibold text-white">{{ copy.noServiceShort }}</p>
+                  <p class="mt-2 text-xs leading-6 text-slate-400">{{ copy.noServiceComing }}</p>
+                </template>
+              </article>
+            </div>
           </div>
-          <h3 class="mt-8 text-2xl font-semibold text-white">{{ scene.title }}</h3>
-          <p class="mt-4 text-sm leading-7 text-slate-400">{{ scene.copy }}</p>
         </article>
-      </div>
-    </section>
 
-    <section class="grid gap-5 lg:grid-cols-3">
-      <article
-        v-for="item in servicePromises"
-        :key="item.title"
-        class="card-hover cyber-corner"
-      >
-        <div class="flex items-center justify-between">
-          <span class="tag">{{ item.tag }}</span>
-          <span class="text-sm font-semibold text-primary-200">适合明确目标的玩家</span>
+        <div class="space-y-4">
+          <button
+            v-for="service in selectedGameServices"
+            :key="service.id"
+            type="button"
+            class="home-service-card"
+            @click="openService(service.id)"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.24em] text-slate-500">{{ service.service_type }}</p>
+                <h3 class="mt-3 text-2xl font-semibold text-white">{{ service.title }}</h3>
+                <p class="mt-3 text-sm leading-7 text-slate-300">
+                  {{ service.description || copy.serviceFallback }}
+                </p>
+              </div>
+              <span class="tag">{{ formatPrice(service.price_per_hour) }}</span>
+            </div>
+
+            <div class="mt-5 flex items-center justify-between gap-4 text-sm text-slate-400">
+              <p>{{ getGamePlatformLabel(activeGame?.platform) }}</p>
+              <p>{{ copy.dealsPrefix }}{{ service.order_count || 0 }}</p>
+            </div>
+          </button>
+
+          <article v-if="!selectedGameServices.length" class="empty-panel !p-8 !text-left">
+            <h3 class="text-2xl font-semibold text-white">{{ copy.noSampleTitle }}</h3>
+            <p class="mt-3 text-sm leading-7 text-slate-400">{{ copy.noSampleCopy }}</p>
+            <button type="button" class="btn-primary mt-6" @click="openGameZone">
+              {{ copy.enterPrefix }}{{ activeGame?.name || '' }}
+            </button>
+          </article>
         </div>
-        <h2 class="mt-6 text-xl font-semibold text-white">{{ item.title }}</h2>
-        <p class="mt-3 text-sm leading-7 text-slate-400">{{ item.copy }}</p>
-      </article>
-    </section>
-
-    <section class="grid gap-8 lg:grid-cols-[0.92fr_1.08fr]">
-      <div class="surface-card p-6 sm:p-8">
-        <p class="eyebrow">下单流程</p>
-        <h2 class="section-title mt-5">把需求说清楚，比盲目发单更容易拿到合适结果</h2>
-        <p class="section-copy mt-3">
-          对玩家来说，最重要的不是页面有多少块，而是能不能快速说清楚“我玩什么、我想提升什么、我愿意花多少、我什么时候方便”。
-        </p>
-      </div>
-
-      <div class="grid gap-4 sm:grid-cols-2">
-        <article
-          v-for="(step, index) in journeySteps"
-          :key="step.title"
-          class="card cyber-corner"
-        >
-          <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-500/10 text-sm font-semibold text-primary-100 border" style="border-color: rgba(0, 240, 255, 0.5); box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);">
-            {{ index + 1 }}
-          </div>
-          <h3 class="mt-5 text-lg font-semibold text-white">{{ step.title }}</h3>
-          <p class="mt-2 text-sm leading-6 text-slate-400">{{ step.copy }}</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="surface-card scanline-overlay p-6 text-center sm:p-8 lg:p-10">
-      <p class="eyebrow">开始下单</p>
-      <h2 class="section-title mt-4">已经想好目标了，就把需求写出来。</h2>
-      <p class="mx-auto mt-3 max-w-3xl text-sm leading-7 text-slate-400">
-        不管你是想冲段、赛季保分，还是想把原神活动和日常委托交给别人处理，先把需求整理清楚，再进入订单大厅或发布页面会更顺手。
-      </p>
-      <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-        <router-link :to="primaryAction.to" class="btn-primary px-6 py-3">
-          {{ primaryAction.label }}
-        </router-link>
-        <router-link :to="secondaryAction.to" class="btn-secondary px-6 py-3">
-          {{ secondaryAction.label }}
-        </router-link>
       </div>
     </section>
   </div>
