@@ -103,3 +103,34 @@ export function getUserRoleLabel(role) {
 export function getApplicationStatusMeta(status) {
   return APPLICATION_STATUS_META[status] || APPLICATION_STATUS_META.NONE
 }
+
+/**
+ * 返回人性化的状态标签，区分代练和陪玩场景。
+ * serviceType: '代练' | '陪玩' | '教学' | 其他
+ */
+export function getHumanStatusLabel(status, serviceType) {
+  const isBoost = serviceType === '代练'
+  const map = {
+    PENDING: isBoost ? '等待代练接单' : '等待陪玩接单',
+    LOCKED: isBoost ? '代练上号中' : '陪玩进行中',
+    COMPLETED: isBoost ? '代练完成了！' : '这局打完了！',
+    DISPUTED: '订单争议中',
+    CANCELLED: '订单已取消',
+  }
+  return map[status] ?? getOrderStatusLabel(status)
+}
+
+/**
+ * 返回状态对应的副标题，区分代练和陪玩场景。
+ */
+export function getHumanStatusSubtitle(status, serviceType) {
+  const isBoost = serviceType === '代练'
+  const map = {
+    PENDING: '需求已发出，代练们正在看',
+    LOCKED: isBoost ? '代练正在使用你的账号上分' : '陪玩已就位，一起开黑吧',
+    COMPLETED: '记得说说这次体验',
+    DISPUTED: '平台正在介入处理',
+    CANCELLED: '需要重新找吗？',
+  }
+  return map[status] ?? ''
+}
