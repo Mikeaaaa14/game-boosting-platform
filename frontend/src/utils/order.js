@@ -126,7 +126,7 @@ export function getHumanStatusLabel(status, serviceType) {
 export function getHumanStatusSubtitle(status, serviceType) {
   const isBoost = serviceType === '代练'
   const map = {
-    PENDING: '需求已发出，代练们正在看',
+    PENDING: isBoost ? '需求已发出，代练们正在看' : '需求已发出，陪玩们正在看',
     LOCKED: isBoost ? '代练正在使用你的账号上分' : '陪玩已就位，一起开黑吧',
     COMPLETED: '记得说说这次体验',
     DISPUTED: '平台正在介入处理',
