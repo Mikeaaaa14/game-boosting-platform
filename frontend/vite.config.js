@@ -14,6 +14,11 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      '/api/v1/chat/ws': {
+        target: proxyTarget,
+        changeOrigin: true,
+        ws: true
+      },
       '/api': {
         target: proxyTarget,
         changeOrigin: true
@@ -23,5 +28,8 @@ export default defineConfig({
         changeOrigin: true
       }
     }
-  }
+  },
+  test: {
+    environment: 'node',
+  },
 })
