@@ -29,6 +29,7 @@ const chatLoading = ref(false)
 const reviews = ref([])
 const reviewForm = ref({ rating: 5, content: '' })
 const editingReview = ref(false)
+const confirmSuccess = ref(false)
 
 const order = computed(() => ordersStore.currentOrder)
 const loading = computed(() => ordersStore.loading)
@@ -142,7 +143,7 @@ async function handleAccept() {
   successMessage.value = ''
   const result = await ordersStore.acceptOrder(order.value.id)
   if (result.success) {
-    successMessage.value = '已接单'
+    successMessage.value = '接下来了，准备开冲'
   } else {
     errorMessage.value = result.error
   }
@@ -155,7 +156,9 @@ async function handleComplete() {
   successMessage.value = ''
   const result = await ordersStore.completeOrder(order.value.id)
   if (result.success) {
-    successMessage.value = '已完成'
+    successMessage.value = isBoostOrder.value ? '代练完成了，说声辛苦' : '这局打完了，说声谢谢'
+    confirmSuccess.value = true
+    window.setTimeout(() => { confirmSuccess.value = false }, 1500)
     await fetchReviews()
   } else {
     errorMessage.value = result.error
@@ -391,11 +394,15 @@ onMounted(async () => {
             <button
               v-if="isAssignedBooster && order.status === 'LOCKED'"
               class="btn-success py-3"
+              :class="{ 'btn-confirm-success': confirmSuccess }"
               :disabled="actionLoading"
               @click="handleComplete"
             >
               {{ isBoostOrder ? '确认，代练完成了' : '确认，这局打完了' }}
             </button>
+            <p v-if="isLocked && isBoostOrder && isOwner" class="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-xs leading-6 text-yellow-200">
+              代练正在你的账号上操作，请勿登录账号，避免影响进度。
+            </p>
             <button
               v-if="isOwner && order.status === 'PENDING'"
               class="btn-danger py-3"
@@ -436,7 +443,7 @@ onMounted(async () => {
       </div>
 
       <section v-if="order.status === 'COMPLETED'" class="surface-card space-y-4 p-6 sm:p-8">
-        <h3 class="section-title !text-2xl">评价</h3>
+        <h3 class="section-title !text-2xl">说说这次体验</h3>
 
         <div v-for="review in reviews" :key="review.id" class="stat-card">
           <div class="flex items-center justify-between gap-3">
@@ -473,7 +480,7 @@ onMounted(async () => {
           <textarea
             v-model="reviewForm.content"
             class="home-search-input !min-h-[80px]"
-            placeholder="写下你的评价..."
+            placeholder="打法怎么样？服务态度好不好？达到你的预期了吗？"
           ></textarea>
           <div class="flex gap-2">
             <button type="button" class="btn-primary !px-4 !py-2" @click="submitReview">
