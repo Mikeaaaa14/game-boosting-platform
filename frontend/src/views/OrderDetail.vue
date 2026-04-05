@@ -8,7 +8,7 @@ import { useOrdersStore } from '@/stores/orders'
 import { getGameImage } from '@/data/gameImages'
 import api from '@/utils/api'
 import { formatDateTime, formatPrice } from '@/utils/display'
-import { getOrderStatusBadgeClass, getOrderStatusLabel, getOrderStatusMeta } from '@/utils/order'
+import { getOrderStatusBadgeClass, getOrderStatusLabel, getOrderStatusMeta, getHumanStatusLabel, getHumanStatusSubtitle } from '@/utils/order'
 
 const props = defineProps({
   id: {
@@ -44,6 +44,11 @@ const canContactOrderOwner = computed(() => {
   return isBooster.value || isAdmin.value
 })
 const statusMeta = computed(() => getOrderStatusMeta(order.value?.status))
+const humanStatusLabel = computed(() => getHumanStatusLabel(order.value?.status, order.value?.service_type))
+const humanStatusSubtitle = computed(() => getHumanStatusSubtitle(order.value?.status, order.value?.service_type))
+const isPending = computed(() => order.value?.status === 'PENDING')
+const isLocked = computed(() => order.value?.status === 'LOCKED')
+const isBoostOrder = computed(() => order.value?.service_type === '代练')
 const heroStyle = computed(() => {
   const visual = getGameImage(order.value?.game_name)
   return {
@@ -74,14 +79,14 @@ const timeline = computed(() => {
   }
 
   return [
-    { title: '发布', time: formatDateTime(order.value.created_at), active: true },
+    { title: '需求已发出', time: formatDateTime(order.value.created_at), active: true },
     {
-      title: '接单',
-      time: order.value.locked_at ? formatDateTime(order.value.locked_at) : '待接单',
+      title: isBoostOrder.value ? '代练已接单' : '陪玩已接单',
+      time: order.value.locked_at ? formatDateTime(order.value.locked_at) : '等待中…',
       active: ['LOCKED', 'COMPLETED', 'DISPUTED'].includes(order.value.status),
     },
     {
-      title: '完成',
+      title: isBoostOrder.value ? '代练完成' : '陪玩结束',
       time: order.value.completed_at ? formatDateTime(order.value.completed_at) : '未完成',
       active: order.value.status === 'COMPLETED',
     },
@@ -128,14 +133,6 @@ function paymentBadgeClass(paymentStatus) {
     '!bg-yellow-500/20 !text-yellow-300 !border-yellow-500/30': paymentStatus === 'UNPAID',
     '!bg-green-500/20 !text-green-300 !border-green-500/30': paymentStatus === 'PAID',
     '!bg-slate-500/20 !text-slate-300 !border-slate-500/30': paymentStatus === 'REFUNDED',
-  }
-}
-
-function syncOrderState(updatedOrder) {
-  ordersStore.currentOrder = updatedOrder
-  const index = ordersStore.orders.findIndex((item) => item.id === updatedOrder.id)
-  if (index !== -1) {
-    ordersStore.orders[index] = updatedOrder
   }
 }
 
@@ -186,15 +183,12 @@ async function handlePay() {
   actionLoading.value = true
   errorMessage.value = ''
   successMessage.value = ''
-
-  try {
-    const resp = await api.put(`/orders/${order.value.id}/pay`)
-    syncOrderState(resp.data)
+  const result = await ordersStore.payOrder(order.value.id)
+  if (result.success) {
     successMessage.value = '支付成功'
-  } catch (err) {
-    errorMessage.value = err.message || '支付失败'
+  } else {
+    errorMessage.value = result.error
   }
-
   actionLoading.value = false
 }
 
@@ -202,15 +196,12 @@ async function handleRefund() {
   actionLoading.value = true
   errorMessage.value = ''
   successMessage.value = ''
-
-  try {
-    const resp = await api.put(`/orders/${order.value.id}/refund`)
-    syncOrderState(resp.data)
+  const result = await ordersStore.refundOrder(order.value.id)
+  if (result.success) {
     successMessage.value = '退款成功'
-  } catch (err) {
-    errorMessage.value = err.message || '退款失败'
+  } else {
+    errorMessage.value = result.error
   }
-
   actionLoading.value = false
 }
 
@@ -262,7 +253,7 @@ async function submitReview() {
     }
     editingReview.value = false
     reviewForm.value = { rating: 5, content: '' }
-    successMessage.value = isEditing ? '评价已更新' : '评价已提交'
+    successMessage.value = isEditing ? '评价更新了' : '谢谢，你的反馈会帮助更多人找到靠谱的代练'
     await fetchReviews()
   } catch (err) {
     errorMessage.value = err.message || '评价失败'
@@ -299,11 +290,12 @@ onMounted(async () => {
           <div class="space-y-4">
             <div class="flex flex-wrap items-center gap-3">
               <span class="tag">{{ order.game_name }}</span>
-              <span :class="getOrderStatusBadgeClass(order.status)">{{ getOrderStatusLabel(order.status) }}</span>
+              <span :class="getOrderStatusBadgeClass(order.status)">{{ humanStatusLabel }}</span>
               <span v-if="order.payment_status" :class="paymentBadgeClass(order.payment_status)">
                 {{ paymentLabel(order.payment_status) }}
               </span>
             </div>
+            <p v-if="humanStatusSubtitle" class="mt-2 text-sm text-slate-400">{{ humanStatusSubtitle }}</p>
             <h1 class="section-title neon-text !text-4xl sm:!text-5xl">{{ order.current_rank }} -> {{ order.target_rank }}</h1>
             <p class="text-sm text-slate-300">{{ compactSummary() }}</p>
           </div>
@@ -328,7 +320,7 @@ onMounted(async () => {
 
       <div class="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
         <section class="space-y-6">
-          <article class="surface-card p-6 sm:p-8">
+          <article class="surface-card p-6 sm:p-8" :class="{ 'shimmer-pending': isPending }">
             <h2 class="text-2xl font-semibold text-white">时间线</h2>
             <div class="mt-6 space-y-4">
               <div v-for="(item, index) in timeline" :key="item.title" class="flex gap-4">
@@ -402,7 +394,7 @@ onMounted(async () => {
               :disabled="actionLoading"
               @click="handleComplete"
             >
-              完成
+              {{ isBoostOrder ? '确认，代练完成了' : '确认，这局打完了' }}
             </button>
             <button
               v-if="isOwner && order.status === 'PENDING'"
@@ -436,7 +428,7 @@ onMounted(async () => {
               :disabled="chatLoading"
               @click="handleStartConversation"
             >
-              {{ chatLoading ? '打开中...' : '联系用户' }}
+              {{ chatLoading ? '打开中...' : '联系老板' }}
             </button>
             <button class="btn-secondary py-3" @click="router.push({ name: 'orders' })">返回列表</button>
           </div>
@@ -485,7 +477,7 @@ onMounted(async () => {
           ></textarea>
           <div class="flex gap-2">
             <button type="button" class="btn-primary !px-4 !py-2" @click="submitReview">
-              {{ editingReview ? '保存修改' : '提交评价' }}
+              {{ editingReview ? '保存修改' : '说说这次体验' }}
             </button>
             <button v-if="editingReview" type="button" class="btn-ghost !px-4 !py-2" @click="editingReview = false">
               取消
