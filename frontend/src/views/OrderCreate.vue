@@ -12,6 +12,7 @@ import {
   getGamePlatformLabel,
   getGameServiceTypes,
 } from '@/utils/gameCatalog'
+import { getPublishButtonLabel } from '@/utils/humanCopy'
 
 const router = useRouter()
 const gamesStore = useGamesStore()
@@ -92,6 +93,11 @@ const canPublish = computed(() => {
   return Boolean(selectedGame.value && description.value.trim() && Number(formData.value.price) > 0)
 })
 
+const publishButtonLabel = computed(() => {
+  if (isSubmitting.value) return '正在发布...'
+  return getPublishButtonLabel(formData.value.service_type)
+})
+
 function syncSelectedGame(game) {
   if (!game) {
     return
@@ -112,7 +118,7 @@ function pickGame(game) {
 
 function nextFromSelect() {
   if (!selectedGame.value) {
-    errorMessage.value = '请先选择一个游戏。'
+    errorMessage.value = '还没选游戏，先选一个吧。'
     return
   }
 
@@ -138,7 +144,7 @@ function appendServiceType(serviceType) {
 
 async function analyzeRequirement() {
   if (!description.value.trim()) {
-    errorMessage.value = '请先写下你的需求描述。'
+    errorMessage.value = '需求还没写，简单描述一下你想要什么。'
     return
   }
 
@@ -207,7 +213,7 @@ function skipAIAndConfirm() {
 
 async function publishOrder() {
   if (!canPublish.value) {
-    errorMessage.value = '请至少确认游戏、需求描述和预算金额。'
+    errorMessage.value = '还差一步 — 游戏、需求描述和预算都填一下。'
     return
   }
 
@@ -230,7 +236,7 @@ async function publishOrder() {
     return
   }
 
-  successMessage.value = '订单已发布，正在跳转到订单大厅。'
+  successMessage.value = `需求发出去了，等${formData.value.service_type || '代练'}接单。`
   window.setTimeout(() => {
     router.push({ name: 'orders' })
   }, 900)
@@ -273,10 +279,10 @@ onMounted(async () => {
         <div class="space-y-4">
           <p class="eyebrow">发布订单</p>
           <h1 class="section-title neon-text !text-4xl sm:!text-5xl">
-            选游戏，写需求，直接发。
+            找代练，就这几步。
           </h1>
           <p class="section-copy max-w-3xl">
-            四步走完，不绕路。
+            选游戏 → 写需求 → 确认发布，搞定。
           </p>
         </div>
 
@@ -319,7 +325,7 @@ onMounted(async () => {
           <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p class="text-sm font-medium text-primary-100">第 1 步 / 共 4 步</p>
-              <h2 class="mt-2 text-2xl font-semibold text-white">选择你这次要发布需求的游戏</h2>
+              <h2 class="mt-2 text-2xl font-semibold text-white">打哪个游戏？</h2>
             </div>
 
             <div class="flex flex-wrap gap-2">
@@ -377,16 +383,16 @@ onMounted(async () => {
 
           <div class="mt-6 flex justify-end">
             <button class="btn-primary" :disabled="!canGoToDescribe" @click="nextFromSelect">
-              下一步：写需求
+              选好了，写需求 →
             </button>
           </div>
         </section>
 
         <section v-else-if="step === 'describe'" class="surface-card p-6 sm:p-8">
           <p class="text-sm font-medium text-primary-100">第 2 步 / 共 4 步</p>
-          <h2 class="mt-2 text-2xl font-semibold text-white">用自然语言写下你的需求</h2>
+          <h2 class="mt-2 text-2xl font-semibold text-white">告诉我们你想打什么</h2>
           <p class="mt-3 text-sm leading-7 text-slate-400">
-            建议把区服、目标段位、时段和偏好一起写进去，AI 会帮你整理成结构化标签。
+            区服、目标段位、时间偏好都写上，代练更容易理解你的需求。
           </p>
 
           <div class="mt-6 rounded-[26px] border border-white/10 p-5" :style="selectedGameStyle">
@@ -419,7 +425,7 @@ onMounted(async () => {
           </div>
 
           <div class="mt-6">
-            <label class="label" for="order-description">需求描述</label>
+            <label class="label" for="order-description">你的需求</label>
             <textarea
               id="order-description"
               v-model="description"
@@ -431,18 +437,18 @@ onMounted(async () => {
 
           <div class="mt-6 flex flex-col gap-3 sm:flex-row">
             <button class="btn-secondary" @click="backToSelect">返回改游戏</button>
-            <button class="btn-secondary" @click="skipAIAndConfirm">跳过识别，直接填写</button>
+            <button class="btn-secondary" @click="skipAIAndConfirm">跳过，我自己填</button>
             <button class="btn-primary flex-1" :disabled="isAnalyzing" @click="analyzeRequirement">
-              {{ isAnalyzing ? 'AI 正在拆解需求...' : '下一步：让 AI 提取标签' }}
+              {{ isAnalyzing ? 'AI 识别中...' : 'AI 帮我整理一下 →' }}
             </button>
           </div>
         </section>
 
         <section v-else-if="step === 'ai'" class="surface-card p-6 sm:p-8">
           <p class="text-sm font-medium text-primary-100">第 3 步 / 共 4 步</p>
-          <h2 class="mt-2 text-2xl font-semibold text-white">AI 已经把你的需求拆成结构化标签</h2>
+          <h2 class="mt-2 text-2xl font-semibold text-white">AI 帮你整理好了</h2>
           <p class="mt-3 text-sm leading-7 text-slate-400">
-            这里会保留旧字段展示，同时也给你新的 `ai_tags` 结构，确认后进入价格和发布阶段。
+            看看这些信息对不对，有问题可以返回改，没问题就继续。
           </p>
 
           <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -464,15 +470,15 @@ onMounted(async () => {
           <div class="mt-6 flex flex-col gap-3 sm:flex-row">
             <button class="btn-secondary" @click="backToDescribe">返回改描述</button>
             <button class="btn-secondary" :disabled="isAnalyzing" @click="analyzeRequirement">重新识别</button>
-            <button class="btn-primary flex-1" @click="continueToConfirm">下一步：确认价格并发布</button>
+            <button class="btn-primary flex-1" @click="continueToConfirm">信息没问题，去确认价格 →</button>
           </div>
         </section>
 
         <section v-else class="surface-card p-6 sm:p-8">
           <p class="text-sm font-medium text-primary-100">第 4 步 / 共 4 步</p>
-          <h2 class="mt-2 text-2xl font-semibold text-white">确认价格与最终字段</h2>
+          <h2 class="mt-2 text-2xl font-semibold text-white">最后确认一下</h2>
           <p class="mt-3 text-sm leading-7 text-slate-400">
-            AI 结果可以继续微调。你只需要把价格和最后的偏好确认好，就能发布订单。
+            确认价格和偏好，发布后代练会直接看到你的需求。
           </p>
 
           <div class="mt-6 grid gap-5 sm:grid-cols-2">
@@ -493,11 +499,11 @@ onMounted(async () => {
               <input id="confirm-server" v-model="formData.server" type="text" class="input" placeholder="例如：微信区 / 艾欧尼亚" />
             </div>
             <div>
-              <label class="label" for="confirm-current-rank">当前段位</label>
+              <label class="label" for="confirm-current-rank">现在几段</label>
               <input id="confirm-current-rank" v-model="formData.current_rank" type="text" class="input" placeholder="例如：星耀三" />
             </div>
             <div>
-              <label class="label" for="confirm-target-rank">目标段位</label>
+              <label class="label" for="confirm-target-rank">想冲到哪</label>
               <input id="confirm-target-rank" v-model="formData.target_rank" type="text" class="input" placeholder="例如：王者" />
             </div>
             <div>
@@ -536,10 +542,16 @@ onMounted(async () => {
               <label class="label" for="confirm-password">游戏密码</label>
               <input id="confirm-password" v-model="formData.game_password" type="password" class="input" placeholder="可选填写" />
             </div>
+            <p
+              v-if="formData.service_type === '代练'"
+              class="text-xs text-slate-400 mt-1 col-span-2"
+            >
+              代练会用你填写的账号上号，请确认信息准确。
+            </p>
           </div>
 
           <div class="mt-6">
-            <label class="label" for="confirm-notes">补充说明</label>
+            <label class="label" for="confirm-notes">还有什么想说的</label>
             <textarea id="confirm-notes" v-model="formData.notes" rows="4" class="input resize-none" placeholder="例如：希望晚上 8 点后开打，全程语音沟通。"></textarea>
           </div>
 
@@ -548,7 +560,7 @@ onMounted(async () => {
               返回上一步
             </button>
             <button class="btn-primary flex-1" :disabled="isSubmitting || !canPublish" @click="publishOrder">
-              {{ isSubmitting ? '正在发布订单...' : '确认发布订单' }}
+              {{ publishButtonLabel }}
             </button>
           </div>
         </section>
