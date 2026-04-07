@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -63,7 +64,17 @@ class UserService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="该邮箱已被注册",
             )
-        
+
+        # Check if username already exists. Without this, any later user can
+        # claim the same display name and impersonate existing accounts in
+        # chat/system messages.
+        existing_username = await self._get_user_by_username(user_data.username)
+        if existing_username is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="该用户名已被占用",
+            )
+
         # Create user with hashed password
         requested_role = user_data.role
         role = UserRole.USER
@@ -81,17 +92,34 @@ class UserService:
             is_active=True,
             is_verified=False,
         )
-        
+
         self._db.add(user)
-        await self._db.flush()
+        # Two concurrent registrations with the same email/username can both
+        # pass the check-then-insert above. The DB unique constraint catches
+        # them; translate the IntegrityError into a clean 400 instead of a
+        # raw 500.
+        try:
+            await self._db.flush()
+        except IntegrityError:
+            await self._db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="该邮箱或用户名已被占用",
+            )
         await self._db.refresh(user)
-        
+
         logger.info(f"Registered new user: {user.email} with role {user.role.value}")
-        
+
         return user
 
-    async def ensure_default_admin(self) -> User:
-        """Create default admin account if it does not exist."""
+    async def ensure_default_admin(self) -> User | None:
+        """Create default admin account if it does not exist.
+
+        The admin password MUST be supplied via the DEFAULT_ADMIN_PASSWORD
+        environment variable.  If it is empty or shorter than 8 characters the
+        bootstrap is skipped so the platform never starts with a well-known
+        credential.
+        """
         admin = await self.get_user_by_email(settings.DEFAULT_ADMIN_EMAIL)
         if admin is not None:
             if admin.role != UserRole.ADMIN:
@@ -100,10 +128,19 @@ class UserService:
                 await self._db.refresh(admin)
             return admin
 
+        password = settings.DEFAULT_ADMIN_PASSWORD
+        if not password or len(password) < 8:
+            logger.warning(
+                "DEFAULT_ADMIN_PASSWORD is empty or too short (<8 chars). "
+                "Skipping admin bootstrap. Set a strong password in your "
+                "environment variables to create the default admin account."
+            )
+            return None
+
         admin = User(
             email=settings.DEFAULT_ADMIN_EMAIL,
             username=settings.DEFAULT_ADMIN_USERNAME,
-            hashed_password=hash_password(settings.DEFAULT_ADMIN_PASSWORD),
+            hashed_password=hash_password(password),
             role=UserRole.ADMIN,
             is_active=True,
             is_verified=True,
@@ -179,6 +216,13 @@ class UserService:
         )
         return result.scalar_one_or_none()
     
+    async def _get_user_by_username(self, username: str) -> User | None:
+        """Return a user by username (case-insensitive exact match)."""
+        result = await self._db.execute(
+            select(User).where(User.username == username)
+        )
+        return result.scalar_one_or_none()
+
     async def get_user_by_id(self, user_id: int) -> User | None:
         """
         Get user by ID.
@@ -292,16 +336,36 @@ class UserService:
             Updated User instance.
         """
         data = update_data.model_dump(exclude_unset=True)
-        
+
+        # If the user is changing their username, make sure the target name
+        # isn't already taken. Otherwise the DB unique constraint would
+        # surface as a generic 500 — and without this check users could
+        # attempt to grab an existing display name.
+        new_username = data.get("username")
+        if new_username is not None and new_username != user.username:
+            collision = await self._get_user_by_username(new_username)
+            if collision is not None and collision.id != user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="该用户名已被占用",
+                )
+
         for field, value in data.items():
             if hasattr(user, field):
                 setattr(user, field, value)
-        
-        await self._db.flush()
+
+        try:
+            await self._db.flush()
+        except IntegrityError:
+            await self._db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="该用户名已被占用",
+            )
         await self._db.refresh(user)
-        
+
         logger.info(f"Updated user profile: {user.email}")
-        
+
         return user
     
     async def change_password(
@@ -391,7 +455,7 @@ class UserService:
         if user.role == UserRole.ADMIN:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Admin account does not need to apply as booster.",
+                detail="管理员账号无需申请成为代练",
             )
 
         user.booster_application_status = BoosterApplicationStatus.PENDING
@@ -412,10 +476,19 @@ class UserService:
         self,
         status_filter: BoosterApplicationStatus | None = None,
     ) -> list[User]:
-        """List booster application users for admin review."""
+        """List booster application users for admin review.
+
+        Only users who actually submitted an application (status != NONE)
+        are returned. Without this filter the endpoint would return every
+        non-admin user on the platform as if they had applied.
+        """
         query = select(User).where(User.role != UserRole.ADMIN)
         if status_filter is not None:
             query = query.where(User.booster_application_status == status_filter)
+        else:
+            query = query.where(
+                User.booster_application_status != BoosterApplicationStatus.NONE
+            )
         query = query.order_by(User.created_at.desc())
 
         result = await self._db.execute(query)
@@ -433,19 +506,19 @@ class UserService:
         if admin.role != UserRole.ADMIN:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only admin can review applications.",
+                detail="只有管理员可以审核申请",
             )
 
         user = await self.get_user_by_id(target_user_id)
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found.",
+                detail="用户不存在",
             )
         if user.role == UserRole.ADMIN:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot review admin account.",
+                detail="不能审核管理员账号",
             )
 
         user.reviewed_by_admin_id = admin.id

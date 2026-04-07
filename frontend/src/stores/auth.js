@@ -103,8 +103,9 @@ export const useAuthStore = defineStore('auth', () => {
       // Token might be invalid, clear everything
       if (err.status === 401) {
         logout()
+      } else {
+        error.value = err.message
       }
-      error.value = err.message
       return { success: false, error: err.message }
     } finally {
       loading.value = false

@@ -34,17 +34,17 @@ class UserRegister(BaseModel):
     
     password: str = Field(
         ...,
-        min_length=6,
+        min_length=8,
         max_length=100,
-        description="密码",
+        description="密码（至少8位，须包含大写字母和数字）",
         examples=["SecurePass123"],
     )
-    
+
     role: UserRole = Field(
         default=UserRole.USER,
         description="用户角色",
     )
-    
+
     @field_validator("username")
     @classmethod
     def validate_username(cls, v: str) -> str:
@@ -53,13 +53,17 @@ class UserRegister(BaseModel):
         if not v:
             raise ValueError("用户名不能为空")
         return v
-    
+
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
         """Validate password strength."""
-        if len(v) < 6:
-            raise ValueError("密码长度至少6位")
+        if len(v) < 8:
+            raise ValueError("密码长度至少8位")
+        if not any(c.isupper() for c in v):
+            raise ValueError("密码须包含至少一个大写字母")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("密码须包含至少一个数字")
         return v
 
 
@@ -119,17 +123,21 @@ class PasswordChange(BaseModel):
     
     new_password: str = Field(
         ...,
-        min_length=6,
+        min_length=8,
         max_length=100,
-        description="新密码",
+        description="新密码（至少8位，须包含大写字母和数字）",
     )
-    
+
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
         """Validate new password strength."""
-        if len(v) < 6:
-            raise ValueError("新密码长度至少6位")
+        if len(v) < 8:
+            raise ValueError("新密码长度至少8位")
+        if not any(c.isupper() for c in v):
+            raise ValueError("新密码须包含至少一个大写字母")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("新密码须包含至少一个数字")
         return v
 
 

@@ -1,17 +1,58 @@
-# Git worktrees
-.worktrees/
+# Environment / Secrets
+.env
+.env.local
+.env.production
 
-# LaTeX build artifacts in the repository root
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+*.egg
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Build artifacts
 /build/
-/*.aux
-/*.fdb_latexmk
-/*.fls
-/*.lof
-/*.log
-/*.lot
-/*.nav
-/*.out
-/*.snm
-/*.synctex.gz
-/*.toc
-/*.xdv
+
+# LaTeX artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+*.xdv
+
+# LaTeX source (course reports, not part of the project)
+*.tex
+.latexmkrc
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Claude Code / Superpowers / Worktrees
+.claude/
+.superpowers/
+.worktrees/
+docs/superpowers/
+
+# Assets (large binary files)
+素材/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Misc
+config.md

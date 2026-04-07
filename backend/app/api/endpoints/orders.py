@@ -30,6 +30,21 @@ from app.services.order_service import get_order_service
 router = APIRouter(prefix="/orders", tags=["订单"])
 
 
+def _serialize_order(order, viewer: User) -> OrderResponse:
+    """Serialize an order, redacting game_account from viewers who don't own
+    it, weren't assigned to it, and aren't admins.
+    Otherwise a booster browsing the PENDING list could harvest every
+    user's game account."""
+    response = OrderResponse.model_validate(order)
+    if viewer.role == UserRole.ADMIN:
+        return response
+    if viewer.id == order.user_id:
+        return response
+    if order.booster_id is not None and viewer.id == order.booster_id:
+        return response
+    return response.model_copy(update={"game_account": None})
+
+
 @router.post(
     "/analyze",
     response_model=AIAnalysisResponse,
@@ -39,6 +54,7 @@ router = APIRouter(prefix="/orders", tags=["订单"])
 async def analyze_requirement(
     request: OrderAnalyzeRequest,
     db: DatabaseSession,
+    current_user: CurrentUser,
     llm_service: Annotated[LLMService, Depends(get_llm_service)],
 ) -> AIAnalysisResponse:
     """
@@ -166,7 +182,7 @@ async def list_orders(
     pages = (total + page_size - 1) // page_size if total > 0 else 0
     
     return OrderListResponse(
-        items=[OrderResponse.model_validate(order) for order in orders],
+        items=[_serialize_order(order, current_user) for order in orders],
         total=total,
         page=page,
         page_size=page_size,
@@ -187,17 +203,17 @@ async def get_order(
 ) -> OrderResponse:
     """
     Get order details by ID.
-    
+
     Access control:
     - Users can only view their own orders
     - Boosters can view pending orders or their assigned orders
     - Admins can view all orders
     """
     order_service = get_order_service(db)
-    
+
     order = await order_service.get_order_by_id(order_id, current_user)
-    
-    return OrderResponse.model_validate(order)
+
+    return _serialize_order(order, current_user)
 
 
 @router.put(

@@ -31,6 +31,38 @@ const routes = [
     meta: { title: '订单列表', requiresAuth: true },
   },
   {
+    path: '/games',
+    name: 'games',
+    component: () => import('@/views/GameCategoryView.vue'),
+    meta: { title: '游戏分类' },
+  },
+  {
+    path: '/games/:id',
+    name: 'game-zone',
+    component: () => import('@/views/GameZoneView.vue'),
+    meta: { title: '游戏专区' },
+    props: true,
+  },
+  {
+    path: '/services',
+    name: 'services',
+    component: () => import('@/views/ServiceListView.vue'),
+    meta: { title: '陪玩服务' },
+  },
+  {
+    path: '/services/:id',
+    name: 'service-detail',
+    component: () => import('@/views/ServiceDetailView.vue'),
+    meta: { title: '服务详情' },
+    props: true,
+  },
+  {
+    path: '/search',
+    name: 'search',
+    component: () => import('@/views/SearchResultView.vue'),
+    meta: { title: '搜索结果' },
+  },
+  {
     path: '/orders/create',
     name: 'order-create',
     component: () => import('@/views/OrderCreate.vue'),
@@ -44,6 +76,19 @@ const routes = [
     props: true,
   },
   {
+    path: '/chat',
+    name: 'chat-list',
+    component: () => import('@/views/ChatListView.vue'),
+    meta: { title: '消息中心', requiresAuth: true },
+  },
+  {
+    path: '/chat/:id',
+    name: 'chat-detail',
+    component: () => import('@/views/ChatDetailView.vue'),
+    meta: { title: '聊天详情', requiresAuth: true },
+    props: true,
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/views/ProfileView.vue'),
@@ -53,7 +98,7 @@ const routes = [
     path: '/admin',
     name: 'admin',
     component: () => import('@/views/AdminView.vue'),
-    meta: { title: '管理员', requiresAuth: true, adminOnly: true },
+    meta: { title: '管理台', requiresAuth: true, adminOnly: true },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -70,6 +115,15 @@ const router = createRouter({
     if (savedPosition) {
       return savedPosition
     }
+
+    if (to.hash) {
+      return {
+        el: to.hash,
+        top: 96,
+        behavior: 'smooth',
+      }
+    }
+
     return { top: 0 }
   },
 })

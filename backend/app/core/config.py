@@ -44,10 +44,12 @@ class Settings(BaseSettings):
         "http://localhost,http://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000"
     )
 
-    # Bootstrap admin account
+    # Bootstrap admin account – credentials MUST be set via environment variables.
+    # The defaults below are intentionally invalid so the app cannot start with
+    # a well-known password.
     DEFAULT_ADMIN_EMAIL: str = "admin@gameboost.com"
     DEFAULT_ADMIN_USERNAME: str = "SystemAdmin"
-    DEFAULT_ADMIN_PASSWORD: str = "Admin123456"
+    DEFAULT_ADMIN_PASSWORD: str = ""
 
     # File upload
     UPLOAD_DIR: str = "uploads"

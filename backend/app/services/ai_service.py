@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Isolated for maintainability and easy modification
 # =============================================================================
 
-REQUIREMENT_ANALYSIS_SYSTEM_PROMPT: str = """你是一个游戏订单分析助手。请分析用户的中文描述，提取以下字段并返回纯JSON格式：game_name(游戏名), current_rank(当前段位), target_rank(目标段位), price(预算金额,纯数字), role(位置), server(区服)。如果用户描述中有违规词（如'外挂','涉黄'），返回字段 'is_risky': true。"""
+REQUIREMENT_ANALYSIS_SYSTEM_PROMPT: str = """你是一个游戏订单分析助手。请分析用户的中文描述，提取以下字段并返回纯JSON格式：game_name(游戏名), current_rank(当前段位), target_rank(目标段位), price(预算金额,纯数字), role(位置), server(区服), service_type(服务类型), requirements(特殊要求数组)。如果用户描述中有违规词（如'外挂','涉黄'），返回字段 'is_risky': true。"""
 
 REQUIREMENT_ANALYSIS_USER_TEMPLATE: str = """请分析以下用户需求描述，并提取关键信息：
 
@@ -49,6 +49,8 @@ class AnalysisResultKeys:
     PRICE: str = "price"
     ROLE: str = "role"
     SERVER: str = "server"
+    SERVICE_TYPE: str = "service_type"
+    REQUIREMENTS: str = "requirements"
     IS_RISKY: str = "is_risky"
 
 
@@ -241,6 +243,12 @@ class LLMService:
             AnalysisResultKeys.SERVER: self._get_string_value(
                 result, AnalysisResultKeys.SERVER
             ),
+            AnalysisResultKeys.SERVICE_TYPE: self._get_string_value(
+                result, AnalysisResultKeys.SERVICE_TYPE
+            ),
+            AnalysisResultKeys.REQUIREMENTS: self._get_list_value(
+                result, AnalysisResultKeys.REQUIREMENTS
+            ),
             AnalysisResultKeys.IS_RISKY: self._get_boolean_value(
                 result, AnalysisResultKeys.IS_RISKY
             ),
@@ -285,6 +293,22 @@ class LLMService:
         if isinstance(value, str):
             return value.lower() in ("true", "1", "yes", "是")
         return bool(value)
+
+    @staticmethod
+    def _get_list_value(data: dict[str, Any], key: str) -> list[str]:
+        """Extract a normalized list of strings from dict."""
+        value = data.get(key)
+        if value is None:
+            return []
+        if isinstance(value, list):
+            normalized: list[str] = []
+            for item in value:
+                text = str(item).strip()
+                if text:
+                    normalized.append(text)
+            return normalized
+        text = str(value).strip()
+        return [text] if text else []
     
     async def health_check(self) -> bool:
         """

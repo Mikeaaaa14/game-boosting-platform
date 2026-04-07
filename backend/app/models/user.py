@@ -69,9 +69,12 @@ class User(Base):
         nullable=False,
     )
     
-    # Profile fields
+    # Profile fields. username is unique so it cannot be used to
+    # impersonate another account (system messages render by username).
     username: Mapped[str] = mapped_column(
         String(100),
+        unique=True,
+        index=True,
         nullable=False,
     )
     

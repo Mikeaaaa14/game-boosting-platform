@@ -51,21 +51,51 @@ async def submit_booster_application(
     if current_user.booster_application_status == BoosterApplicationStatus.APPROVED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Your booster application is already approved.",
+            detail="你的代练申请已通过",
         )
 
-    if not proof_image.content_type or not proof_image.content_type.startswith("image/"):
+    allowed_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+    allowed_content_types = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+    max_size_bytes = 5 * 1024 * 1024
+
+    if proof_image.content_type not in allowed_content_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Proof file must be an image.",
+            detail="证明材料必须是图片 (png/jpg/webp/gif)",
+        )
+
+    raw_suffix = Path(proof_image.filename or "").suffix.lower()
+    if raw_suffix not in allowed_extensions:
+        content_suffix_map = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+        }
+        raw_suffix = content_suffix_map.get(proof_image.content_type, "")
+    if raw_suffix not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="图片格式不支持",
+        )
+
+    image_bytes = await proof_image.read(max_size_bytes + 1)
+    if len(image_bytes) > max_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="图片过大，限制 5MB",
+        )
+    if not image_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="图片内容为空",
         )
 
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    suffix = Path(proof_image.filename or "").suffix or ".png"
-    file_name = f"booster-proof-{current_user.id}-{uuid4().hex}{suffix}"
+    file_name = f"booster-proof-{current_user.id}-{uuid4().hex}{raw_suffix}"
     file_path = upload_dir / file_name
-    file_path.write_bytes(await proof_image.read())
+    file_path.write_bytes(image_bytes)
     proof_url = f"/uploads/{file_name}"
 
     user_service = get_user_service(db)

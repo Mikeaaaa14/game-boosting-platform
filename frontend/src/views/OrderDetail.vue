@@ -38,12 +38,19 @@ const isBooster = computed(() => authStore.isBooster)
 const isAdmin = computed(() => authStore.isAdmin)
 const isOwner = computed(() => order.value?.user_id === currentUser.value?.id)
 const isAssignedBooster = computed(() => order.value?.booster_id === currentUser.value?.id)
-const canContactOrderOwner = computed(() => {
-  if (!order.value?.user_id || isOwner.value) {
-    return false
+const chatTargetUserId = computed(() => {
+  if (!order.value || !currentUser.value) {
+    return null
   }
-  return isAssignedBooster.value || isAdmin.value
+  if (isOwner.value) {
+    return order.value.booster_id || null
+  }
+  if (isAssignedBooster.value) {
+    return order.value.user_id || null
+  }
+  return null
 })
+const canStartChat = computed(() => chatTargetUserId.value != null)
 const statusMeta = computed(() => getOrderStatusMeta(order.value?.status))
 const humanStatusLabel = computed(() => getHumanStatusLabel(order.value?.status, order.value?.service_type))
 const humanStatusSubtitle = computed(() => getHumanStatusSubtitle(order.value?.status, order.value?.service_type))
@@ -209,13 +216,13 @@ async function handleRefund() {
 }
 
 async function handleStartConversation() {
-  if (!order.value?.user_id) {
+  if (!chatTargetUserId.value) {
     return
   }
 
   chatLoading.value = true
   errorMessage.value = ''
-  const result = await chatStore.startConversation(order.value.user_id, order.value.id)
+  const result = await chatStore.startConversation(chatTargetUserId.value, order.value.id)
   if (result.success) {
     router.push({ name: 'chat-detail', params: { id: result.data.id } })
   } else {
@@ -430,7 +437,7 @@ onMounted(async () => {
               退款
             </button>
             <button
-              v-if="canContactOrderOwner"
+              v-if="canStartChat"
               class="btn-secondary py-3"
               :disabled="chatLoading"
               @click="handleStartConversation"

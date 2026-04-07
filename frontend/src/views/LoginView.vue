@@ -1,38 +1,53 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+
+import AuthShell from '@/components/auth/AuthShell.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useGamesStore } from '@/stores/games'
+import { getGamePlatformLabel, getGameServiceTypes, resolveGameVisual } from '@/utils/gameCatalog'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const gamesStore = useGamesStore()
+
+const copy = {
+  title: '\u8d26\u6237\u5165\u53e3',
+  description: '',
+  accountAccess: '\u8d26\u6237\u5165\u53e3',
+  randomBackground: '\u5f53\u524d\u70ed\u533a',
+  currentZone: '\u5f53\u524d\u6218\u573a',
+  currentZoneMeta: '\u767b\u5f55\u540e\u7ee7\u7eed\u4f60\u7684\u9700\u6c42\u3001\u8ba2\u5355\u548c\u5bf9\u8bdd\u3002',
+  signIn: '\u767b\u5f55',
+  pleaseEnterBoth: '\u8bf7\u586b\u5199\u90ae\u7bb1\u548c\u5bc6\u7801\u3002',
+  email: '\u90ae\u7bb1',
+  password: '\u5bc6\u7801',
+  hide: '\u9690\u85cf',
+  show: '\u663e\u793a',
+  emailPlaceholder: '\u8bf7\u8f93\u5165\u5e38\u7528\u90ae\u7bb1',
+  passwordPlaceholder: '\u8bf7\u8f93\u5165\u5bc6\u7801',
+  entering: '\u8fdb\u5165\u4e2d...',
+  enterPlatform: '\u8fdb\u5165\u5e73\u53f0',
+  createAccount: '\u521b\u5efa\u8d26\u53f7',
+  backHome: '\u8fd4\u56de\u9996\u9875',
+  featuredEntry: '\u70ed\u95e8\u5165\u53e3',
+}
 
 const email = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const errorMessage = ref('')
+const backgroundUrl = ref('')
+const spotlightTitle = ref(copy.currentZone)
+const spotlightMeta = ref(copy.currentZoneMeta)
 
 const isLoading = computed(() => authStore.loading)
 const isFormValid = computed(() => email.value.trim() !== '' && password.value.trim() !== '')
 
-const sceneHighlights = [
-  {
-    title: '继续查看订单进度',
-    copy: '登录后可以直接回到你正在跟进的上分、代肝或陪练订单。',
-  },
-  {
-    title: '同步个人资料',
-    copy: '维护昵称、手机号和常玩游戏，方便后续发单、接单和沟通。',
-  },
-  {
-    title: '申请成为代练师',
-    copy: '上传段位截图和擅长说明后，可以申请接取更适合自己的订单。',
-  },
-]
-
 async function handleLogin() {
   if (!isFormValid.value) {
-    errorMessage.value = '请填写邮箱和密码。'
+    errorMessage.value = copy.pleaseEnterBoth
     return
   }
 
@@ -51,127 +66,104 @@ async function handleLogin() {
 function togglePassword() {
   showPassword.value = !showPassword.value
 }
+
+onMounted(async () => {
+  await gamesStore.ensureCatalog()
+
+  const randomGame = gamesStore.randomGame
+  const visual = resolveGameVisual(randomGame)
+  const modes = getGameServiceTypes(randomGame).slice(0, 2).join(' / ')
+
+  backgroundUrl.value = ''
+  spotlightTitle.value = randomGame?.name || copy.currentZone
+  spotlightMeta.value = randomGame
+    ? `${getGamePlatformLabel(randomGame.platform)} / ${modes || copy.featuredEntry}`
+    : copy.currentZoneMeta
+})
 </script>
 
 <template>
-  <div class="page-shell">
-    <div class="grid gap-8 lg:grid-cols-[1.04fr_0.96fr] lg:items-stretch">
-      <section class="hero-panel scanline-overlay flex flex-col justify-between p-6 sm:p-8 lg:p-10">
-        <div class="space-y-5">
-          <p class="eyebrow">账号入口</p>
-          <h1 class="section-title neon-text !text-4xl sm:!text-5xl">
-            欢迎回来，继续处理你的上分订单和服务进度。
-          </h1>
-          <p class="section-copy max-w-2xl">
-            无论你是来发布王者冲星、LOL 冲段，还是查看原神代肝和陪练进度，登录后都能直接回到上次操作的位置。
-          </p>
+  <AuthShell
+    eyebrow=""
+    :title="copy.title"
+    :description="copy.description"
+    :spotlight-label="copy.randomBackground"
+    :spotlight-title="spotlightTitle"
+    :spotlight-meta="spotlightMeta"
+    :background-url="backgroundUrl"
+    compact
+  >
+    <div class="space-y-6">
+      <div>
+        <h2 class="text-3xl font-semibold text-white">{{ copy.signIn }}</h2>
+      </div>
+
+      <div v-if="errorMessage" class="message-error">
+        {{ errorMessage }}
+      </div>
+
+      <form class="space-y-5" @submit.prevent="handleLogin">
+        <div>
+          <label for="email" class="label">{{ copy.email }}</label>
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            class="input"
+            :class="{ 'input-error': errorMessage && !email }"
+            :placeholder="copy.emailPlaceholder"
+            autocomplete="email"
+            required
+          />
         </div>
 
-        <div class="mt-8 grid gap-4">
-          <div class="grid gap-4 sm:grid-cols-3">
-            <div class="stat-card cyber-corner">
-              <p class="text-2xl font-semibold text-white">订单进度</p>
-              <p class="mt-2 text-sm text-slate-400">查看已发布、已接单和已完成状态</p>
-            </div>
-            <div class="stat-card cyber-corner">
-              <p class="text-2xl font-semibold text-white">个人资料</p>
-              <p class="mt-2 text-sm text-slate-400">补充联系方式、简介和常玩游戏</p>
-            </div>
-            <div class="stat-card cyber-corner">
-              <p class="text-2xl font-semibold text-white">接单认证</p>
-              <p class="mt-2 text-sm text-slate-400">提交段位截图后可申请成为代练师</p>
-            </div>
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <label for="password" class="label !mb-0">{{ copy.password }}</label>
+            <button type="button" class="text-xs uppercase tracking-[0.18em] text-slate-400 hover:text-white" @click="togglePassword">
+              {{ showPassword ? copy.hide : copy.show }}
+            </button>
           </div>
-
-          <div class="grid gap-4">
-            <article
-              v-for="item in sceneHighlights"
-              :key="item.title"
-              class="rounded-[28px] border border-white/10 bg-white/5 p-5"
-            >
-              <h2 class="text-lg font-semibold text-white">{{ item.title }}</h2>
-              <p class="mt-2 text-sm leading-7 text-slate-400">{{ item.copy }}</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="surface-card cyber-corner p-6 sm:p-8 lg:p-10">
-        <div class="mb-8">
-          <p class="text-sm font-medium text-primary-100">登录账号</p>
-          <h2 class="mt-2 text-3xl font-semibold text-white">回到你的服务面板</h2>
-          <p class="mt-3 text-sm leading-6 text-slate-400">
-            使用邮箱和密码登录，系统会自动带你回到刚才想访问的页面。
-          </p>
+          <input
+            id="password"
+            v-model="password"
+            :type="showPassword ? 'text' : 'password'"
+            class="input"
+            :class="{ 'input-error': errorMessage && !password }"
+            :placeholder="copy.passwordPlaceholder"
+            autocomplete="current-password"
+            required
+          />
         </div>
 
-        <div v-if="errorMessage" class="message-error mb-6">
-          {{ errorMessage }}
-        </div>
-
-        <form class="space-y-5" @submit.prevent="handleLogin">
-          <div>
-            <label for="email" class="label">邮箱地址</label>
-            <input
-              id="email"
-              v-model="email"
-              type="email"
-              class="input"
-              :class="{ 'input-error': errorMessage && !email }"
-              placeholder="请输入注册邮箱"
-              autocomplete="email"
-              required
-            />
-          </div>
-
-          <div>
-            <div class="mb-2 flex items-center justify-between">
-              <label for="password" class="label !mb-0">登录密码</label>
-              <button type="button" class="text-xs text-slate-400 hover:text-white" @click="togglePassword">
-                {{ showPassword ? '隐藏密码' : '显示密码' }}
-              </button>
-            </div>
-            <input
-              id="password"
-              v-model="password"
-              :type="showPassword ? 'text' : 'password'"
-              class="input"
-              :class="{ 'input-error': errorMessage && !password }"
-              placeholder="请输入密码"
-              autocomplete="current-password"
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            :disabled="isLoading || !isFormValid"
-            class="btn-primary w-full py-3"
+        <button
+          type="submit"
+          :disabled="isLoading || !isFormValid"
+          class="btn-primary w-full py-3"
+        >
+          <svg
+            v-if="isLoading"
+            class="h-5 w-5 animate-spin"
+            fill="none"
+            viewBox="0 0 24 24"
           >
-            <svg
-              v-if="isLoading"
-              class="h-5 w-5 animate-spin"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            {{ isLoading ? '登录中...' : '登录并进入平台' }}
-          </button>
-        </form>
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          {{ isLoading ? copy.entering : copy.enterPlatform }}
+        </button>
+      </form>
 
-        <div class="my-8 border-t border-white/10"></div>
+      <div class="cyber-divider"></div>
 
-        <div class="space-y-3">
-          <router-link to="/register" class="btn-secondary w-full py-3">
-            还没有账号，前往注册
-          </router-link>
-          <router-link to="/" class="btn-ghost w-full py-3">
-            返回首页
-          </router-link>
-        </div>
-      </section>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <router-link to="/register" class="btn-secondary w-full py-3">
+          {{ copy.createAccount }}
+        </router-link>
+        <router-link to="/" class="btn-ghost w-full py-3">
+          {{ copy.backHome }}
+        </router-link>
+      </div>
     </div>
-  </div>
+  </AuthShell>
 </template>

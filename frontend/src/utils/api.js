@@ -42,48 +42,58 @@ api.interceptors.request.use(
   }
 )
 
+// ── Token refresh lock ──
+// When multiple requests get 401 at the same time, only ONE refresh is
+// issued.  The others wait for the same promise.
+let refreshPromise = null
+
+function doRefresh(authStore) {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(apiPath('/auth/refresh'), {
+        refresh_token: authStore.refreshToken,
+      })
+      .then((res) => {
+        const { access_token, refresh_token } = res.data
+        authStore.setTokens(access_token, refresh_token)
+        return access_token
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
 // Response interceptor - handle errors and token refresh
 api.interceptors.response.use(
-  (response) => {
-    return response
-  },
+  (response) => response,
   async (error) => {
     const originalRequest = error.config
     const authStore = useAuthStore()
-    
+
     // Handle 401 Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
-      
-      // Try to refresh token
+
       if (authStore.refreshToken) {
         try {
-          const response = await axios.post(apiPath('/auth/refresh'), {
-            refresh_token: authStore.refreshToken,
-          })
-          
-          const { access_token, refresh_token } = response.data
-          authStore.setTokens(access_token, refresh_token)
-          
-          // Retry original request with new token
-          originalRequest.headers.Authorization = `Bearer ${access_token}`
+          const newToken = await doRefresh(authStore)
+          originalRequest.headers.Authorization = `Bearer ${newToken}`
           return api(originalRequest)
-        } catch (refreshError) {
-          // Refresh failed, logout user
+        } catch {
           authStore.logout()
           router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
-          return Promise.reject(refreshError)
+          return Promise.reject(error)
         }
       } else {
-        // No refresh token, redirect to login
         authStore.logout()
         router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
       }
     }
-    
-    // Handle other errors
+
     const errorMessage = error.response?.data?.detail || error.message || '请求失败'
-    
+
     return Promise.reject({
       status: error.response?.status,
       message: errorMessage,

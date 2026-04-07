@@ -189,26 +189,70 @@ export const useOrdersStore = defineStore('orders', () => {
   async function cancelOrder(orderId) {
     loading.value = true
     error.value = null
-    
+
     try {
       const response = await api.put(`/orders/${orderId}/cancel`)
-      
+
       // Update order in list
       const index = orders.value.findIndex(o => o.id === orderId)
       if (index !== -1) {
         orders.value[index] = response.data
       }
-      
+
       if (currentOrder.value?.id === orderId) {
         currentOrder.value = response.data
       }
-      
+
       return { success: true, data: response.data }
     } catch (err) {
       error.value = err.message
       return { success: false, error: err.message }
     } finally {
       loading.value = false
+    }
+  }
+
+  async function payOrder(orderId) {
+    error.value = null
+
+    try {
+      const response = await api.put(`/orders/${orderId}/pay`)
+
+      const index = orders.value.findIndex(o => o.id === orderId)
+      if (index !== -1) {
+        orders.value[index] = response.data
+      }
+
+      if (currentOrder.value?.id === orderId) {
+        currentOrder.value = response.data
+      }
+
+      return { success: true, data: response.data }
+    } catch (err) {
+      error.value = err.message
+      return { success: false, error: err.message }
+    }
+  }
+
+  async function refundOrder(orderId) {
+    error.value = null
+
+    try {
+      const response = await api.put(`/orders/${orderId}/refund`)
+
+      const index = orders.value.findIndex(o => o.id === orderId)
+      if (index !== -1) {
+        orders.value[index] = response.data
+      }
+
+      if (currentOrder.value?.id === orderId) {
+        currentOrder.value = response.data
+      }
+
+      return { success: true, data: response.data }
+    } catch (err) {
+      error.value = err.message
+      return { success: false, error: err.message }
     }
   }
 
@@ -251,6 +295,8 @@ export const useOrdersStore = defineStore('orders', () => {
     acceptOrder,
     completeOrder,
     cancelOrder,
+    payOrder,
+    refundOrder,
     setFilters,
     setPage,
     clearAnalysisResult,

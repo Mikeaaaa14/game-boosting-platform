@@ -95,7 +95,7 @@ class OrderCreate(BaseModel):
     
     game_password: Optional[str] = Field(
         default=None,
-        max_length=255,
+        max_length=100,
         description="游戏密码",
     )
     
@@ -161,7 +161,7 @@ class OrderUpdate(BaseModel):
     description_ai: Optional[str] = Field(default=None, max_length=2000)
     ai_tags: dict[str, Any] | None = None
     game_account: Optional[str] = Field(default=None, max_length=255)
-    game_password: Optional[str] = Field(default=None, max_length=255)
+    game_password: Optional[str] = Field(default=None, max_length=100)
     service_type: Optional[str] = Field(default=None, max_length=100)
     server: Optional[str] = Field(default=None, max_length=100)
     priority: Optional[int] = Field(default=None, ge=0, le=10)

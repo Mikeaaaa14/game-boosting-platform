@@ -1,11 +1,15 @@
 """Administrator endpoints."""
 
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select, update
 
+from app.api.chat_utils import send_order_system_message
 from app.api.deps import DatabaseSession, get_current_admin
-from app.models.order import OrderStatus
+from app.models.booster_service import BoosterService
+from app.models.order import Order, OrderStatus
 from app.models.user import BoosterApplicationStatus, User
 from app.schemas.admin import (
     AdminOrderInterventionRequest,
@@ -99,18 +103,51 @@ async def intervene_order(
     db: DatabaseSession,
     current_admin: Annotated[User, Depends(get_current_admin)],
 ) -> OrderResponse:
-    if payload.action not in (OrderStatus.CANCELLED, OrderStatus.DISPUTED):
+    allowed_actions = (OrderStatus.CANCELLED, OrderStatus.DISPUTED, OrderStatus.COMPLETED)
+    if payload.action not in allowed_actions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Admin intervention only supports CANCELLED or DISPUTED.",
+            detail="管理员干预仅支持取消、争议或完结订单",
         )
 
-    order_service = get_order_service(db)
-    order = await order_service.get_order_by_id(order_id, current_admin)
+    # Lock the order row so this intervention cannot race with
+    # complete_order / other interventions and double-increment order_count.
+    order_result = await db.execute(
+        select(Order).where(Order.id == order_id).with_for_update()
+    )
+    order = order_result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="订单不存在",
+        )
+
+    previous_status = order.status
     order.status = payload.action
     if payload.reason:
         order.notes = f"[ADMIN] {payload.reason}" + (f"\n{order.notes}" if order.notes else "")
 
+    if payload.action == OrderStatus.COMPLETED and previous_status != OrderStatus.COMPLETED:
+        order.completed_at = datetime.now(timezone.utc)
+        if order.service_id is not None:
+            await db.execute(
+                update(BoosterService)
+                .where(BoosterService.id == order.service_id)
+                .values(order_count=BoosterService.order_count + 1)
+            )
+
     await db.flush()
     await db.refresh(order)
+    await send_order_system_message(
+        db=db,
+        order_id=order.id,
+        content=f"管理员已介入：{payload.reason}" if payload.reason else "管理员已介入处理订单",
+        meta_json={
+            "event": "admin_intervened",
+            "order_id": order.id,
+            "admin_id": current_admin.id,
+            "action": payload.action.value,
+            "reason": payload.reason,
+        },
+    )
     return OrderResponse.model_validate(order)

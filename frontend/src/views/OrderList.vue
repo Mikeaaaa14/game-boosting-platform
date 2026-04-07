@@ -123,9 +123,10 @@ watch(searchGame, () => {
   }, 300)
 })
 
-onMounted(() => {
+onMounted(async () => {
   fetchOrders()
-  chatStore.fetchConversations({ pageSize: 100 })
+  await chatStore.fetchConversations({ pageSize: 100 })
+  await chatStore.fetchUnreadSummary()
 })
 
 onUnmounted(() => {

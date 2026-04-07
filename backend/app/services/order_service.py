@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -202,6 +202,30 @@ class OrderService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="该服务已下架",
+            )
+
+        # Lock booster row and check quota to prevent concurrent overselling
+        booster_result = await self._db.execute(
+            select(User).where(User.id == service.booster_id).with_for_update()
+        )
+        booster = booster_result.scalar_one_or_none()
+        if booster is None or not booster.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="该服务的代练已不可用",
+            )
+
+        active_count_result = await self._db.execute(
+            select(func.count(Order.id)).where(
+                Order.booster_id == booster.id,
+                Order.status == OrderStatus.LOCKED,
+            )
+        )
+        active_count = int(active_count_result.scalar() or 0)
+        if booster.booster_quota <= active_count:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="该代练当前接单额度已满，请稍后再试",
             )
 
         current_rank = (
@@ -410,8 +434,21 @@ class OrderService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="只有代练才能接单",
             )
-        
+
+        # Lock booster row first to serialize quota checks.
+        # Concurrent accepts without this lock can both pass the count check
+        # and exceed the quota.
         if booster.role == UserRole.BOOSTER:
+            locked_booster_result = await self._db.execute(
+                select(User).where(User.id == booster.id).with_for_update()
+            )
+            locked_booster = locked_booster_result.scalar_one_or_none()
+            if locked_booster is None or not locked_booster.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="代练账号不可用",
+                )
+
             active_orders_count_result = await self._db.execute(
                 select(func.count(Order.id)).where(
                     Order.booster_id == booster.id,
@@ -419,7 +456,7 @@ class OrderService:
                 )
             )
             active_orders_count = int(active_orders_count_result.scalar() or 0)
-            if booster.booster_quota <= active_orders_count:
+            if locked_booster.booster_quota <= active_orders_count:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="当前接单额度已满，请先完成现有订单",
@@ -485,36 +522,45 @@ class OrderService:
         Raises:
             HTTPException: If order cannot be completed.
         """
-        order = await self.get_order_by_id(order_id)
-        
+        # Lock the order row to prevent concurrent completions from
+        # both passing the status check and double-incrementing order_count.
+        locked_result = await self._db.execute(
+            select(Order).where(Order.id == order_id).with_for_update()
+        )
+        order = locked_result.scalar_one_or_none()
+        if order is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="订单不存在",
+            )
+
         if order.status != OrderStatus.LOCKED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="只有进行中的订单才能完成",
             )
-        
+
         if user.role != UserRole.ADMIN and order.booster_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="只有接单代练才能完成订单",
             )
-        
+
         order.status = OrderStatus.COMPLETED
         order.completed_at = datetime.now(timezone.utc)
 
         if order.service_id is not None:
-            service_result = await self._db.execute(
-                select(BoosterService).where(BoosterService.id == order.service_id)
+            await self._db.execute(
+                update(BoosterService)
+                .where(BoosterService.id == order.service_id)
+                .values(order_count=BoosterService.order_count + 1)
             )
-            booster_service = service_result.scalar_one_or_none()
-            if booster_service is not None:
-                booster_service.order_count += 1
-        
+
         await self._db.flush()
         await self._db.refresh(order)
-        
+
         logger.info(f"Order {order_id} completed by user {user.id}")
-        
+
         return order
     
     async def cancel_order(
@@ -704,13 +750,35 @@ class OrderService:
         return order
 
     async def pay_order(self, order_id: int, user: User) -> Order:
-        """Simulate payment: UNPAID -> PAID."""
-        order = await self.get_order_by_id(order_id, user)
+        """Simulate payment: UNPAID -> PAID. Locks the order row to prevent
+        double-payment races where two concurrent requests both read UNPAID."""
+        # Existence + access check (raises if user cannot view this order)
+        await self.get_order_by_id(order_id, user)
+
+        # Lock the order row so concurrent /pay calls serialize.
+        locked_result = await self._db.execute(
+            select(Order).where(Order.id == order_id).with_for_update()
+        )
+        order = locked_result.scalar_one_or_none()
+        if order is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="订单不存在",
+            )
 
         if order.user_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="只有下单用户才能支付",
+            )
+
+        # Block payment on terminal / closed states. Without this check a
+        # user could pay a CANCELLED or DISPUTED order, locking funds that
+        # the normal refund flow no longer covers cleanly.
+        if order.status in (OrderStatus.CANCELLED, OrderStatus.DISPUTED):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"订单当前状态为 {order.status.value}，无法支付",
             )
 
         if order.payment_status != PaymentStatus.UNPAID:

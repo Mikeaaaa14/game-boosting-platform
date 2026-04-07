@@ -202,5 +202,17 @@ def verify_token(token: str, token_type: str = "access") -> dict[str, Any] | Non
     
     if payload.get("type") != token_type:
         return None
-    
+
     return payload
+
+
+# =============================================================================
+# SQL UTILITIES
+# =============================================================================
+
+def escape_like(value: str) -> str:
+    """Escape SQL LIKE wildcard characters so user input is treated literally.
+
+    The backslash is used as the escape character (MySQL / SQLAlchemy default).
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

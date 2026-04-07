@@ -39,7 +39,7 @@ const submitting = computed(() => servicesStore.submitting)
 const services = computed(() => servicesStore.services)
 const myServices = computed(() => servicesStore.myServices)
 const pagination = computed(() => servicesStore.pagination)
-const isBooster = computed(() => authStore.userRole === 'BOOSTER')
+const isBooster = computed(() => authStore.isBooster)
 
 const selectedFilterGame = computed(() => {
   return selectedGameId.value ? gamesStore.getGameById(Number(selectedGameId.value)) : null
